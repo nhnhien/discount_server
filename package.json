@@ -1,8 +1,11 @@
 {
   "name": "discount_server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "./index.js",
   "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js",
@@ -10,7 +13,10 @@
     "db-update": "cd src && sequelize-cli db:migrate && sequelize-cli db:seed:all",
     "db-init": "cd src && sequelize-cli db:drop && sequelize-cli db:create && sequelize-cli db:migrate && sequelize-cli db:seed:all",
     "db-migrate": "cd src && sequelize-cli db:migrate",
-    "db-seed": "cd src && sequelize-cli db:seed:all"
+    "db-seed": "cd src && sequelize-cli db:seed:all",
+    "db-sync": "node --env-file=.env src/scripts/syncDatabase.js",
+    "migration-generate": "cd src && sequelize-cli migration:generate --name",
+    "seed-generate": "cd src && sequelize-cli seed:generate --name"
   },
   "keywords": [],
   "author": "",
@@ -18,12 +24,17 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^5.1.1",
+    "cloudinary": "^2.5.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-validator": "^7.2.1",
     "firebase": "^11.3.1",
+    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.12.0",
     "sequelize": "^6.37.5",
+    "vnpay": "^1.6.1"
+  }, 
+  "devDependencies": {
     "sequelize-cli": "^6.6.2"
   }
 }
