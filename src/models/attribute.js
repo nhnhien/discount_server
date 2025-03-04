@@ -1,8 +1,8 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
-const Role = sequelize.define(
-  'Role',
+const Attribute = sequelize.define(
+  'Attribute',
   {
     id: {
       type: DataTypes.INTEGER,
@@ -13,13 +13,12 @@ const Role = sequelize.define(
     name: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
     },
   },
   {
-    tableName: 'role',
+    tableName: 'attribute',
     timestamps: true,
     underscored: true,
   }
 );
-export default Role;
+export default Attribute;

@@ -1,8 +1,8 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
-const Market = sequelize.define(
-  'Market',
+const AttributeValue = sequelize.define(
+  'AttributeValue',
   {
     id: {
       type: DataTypes.INTEGER,
@@ -10,27 +10,26 @@ const Market = sequelize.define(
       autoIncrement: true,
       allowNull: false,
     },
-    name: {
+    attribute_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'attribute',
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
+    value: {
       type: DataTypes.STRING,
       allowNull: false,
-    },
-    currency: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
     },
   },
   {
-    tableName: 'market',
+    tableName: 'attribute_value',
     timestamps: true,
     underscored: true,
   }
 );
-export default Market;
+
+export default AttributeValue;

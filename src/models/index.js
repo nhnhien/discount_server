@@ -1,11 +1,16 @@
-import sequelize from '../config/database';
-import setUpAssociations from './associations';
-import Role from './role';
-import User from './user';
+import sequelize from '../config/database.js';
+import setUpAssociations from './associations.js';
+import Role from './role.js';
+import User from './user.js';
+import Category from './category.js';
+import Market from './market.js';
+import Product from './product.js';
+import Variant from './variant.js';
+import Image from './image.js';
+import Attribute from './attribute.js';
+import AttributeValue from './attribute_value.js';
+import VariantValue from './variant_value.js';
 
 setUpAssociations();
 
-const models = { User, Role };
-
-export { sequelize };
-export default models;
+export { sequelize, Role, User, Category, Market, Product, Variant, Image, Attribute, AttributeValue, VariantValue };

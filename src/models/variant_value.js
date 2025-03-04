@@ -1,8 +1,8 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
-const User = sequelize.define(
-  'User',
+const VariantValue = sequelize.define(
+  'VariantValue',
   {
     id: {
       type: DataTypes.INTEGER,
@@ -10,33 +10,30 @@ const User = sequelize.define(
       autoIncrement: true,
       allowNull: false,
     },
-    username: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-    },
-    password: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    phone: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-    },
-    role_id: {
+    variant_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'role',
+        model: 'variant',
         key: 'id',
       },
+      onDelete: 'CASCADE',
+    },
+    attribute_value_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'attribute_value',
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
     },
   },
   {
-    tableName: 'user',
+    tableName: 'variant_value',
     timestamps: true,
     underscored: true,
   }
 );
-export default User;
+
+export default VariantValue;
