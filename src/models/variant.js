@@ -38,6 +38,10 @@ const Variant = sequelize.define(
       allowNull: false,
       defaultValue: 0,
     },
+    image_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: false,

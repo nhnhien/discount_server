@@ -6,11 +6,10 @@ import Category from './category.js';
 import Market from './market.js';
 import Product from './product.js';
 import Variant from './variant.js';
-import Image from './image.js';
 import Attribute from './attribute.js';
 import AttributeValue from './attribute_value.js';
 import VariantValue from './variant_value.js';
 
 setUpAssociations();
 
-export { sequelize, Role, User, Category, Market, Product, Variant, Image, Attribute, AttributeValue, VariantValue };
+export { sequelize, Role, User, Category, Market, Product, Variant, Attribute, AttributeValue, VariantValue };

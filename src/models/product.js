@@ -36,6 +36,10 @@ const Product = sequelize.define(
         key: 'id',
       },
     },
+    image_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     has_variant: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
@@ -50,7 +54,7 @@ const Product = sequelize.define(
     },
     stock_quantity: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       defaultValue: 0,
     },
   },

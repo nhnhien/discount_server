@@ -3,7 +3,6 @@ import Market from './market.js';
 import Product from './product.js';
 import Role from './role.js';
 import User from './user.js';
-import Image from './image.js';
 import Attribute from './attribute.js';
 import AttributeValue from './attribute_value.js';
 import VariantValue from './variant_value.js';
@@ -26,13 +25,13 @@ const setUpAssociations = () => {
  Product.hasMany(Variant, { foreignKey: 'product_id', as: 'variants', onDelete: 'CASCADE' });
  Variant.belongsTo(Product, { foreignKey: 'product_id' });
 
- // Product - Image (1-M)
- Product.hasMany(Image, { foreignKey: 'product_id', as: 'product_image', onDelete: 'CASCADE' });
- Image.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+  // // Product - Image (1-M)
+  // Product.hasMany(Image, { foreignKey: 'product_id', as: 'product_image', onDelete: 'CASCADE' });
+  // Image.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
- // Variant - Image (1-M)
- Variant.hasMany(Image, { foreignKey: 'variant_id', as: 'varian_image', onDelete: 'CASCADE' });
- Image.belongsTo(Variant, { foreignKey: 'variant_id', as: 'variant' });
+  // // Variant - Image (1-M)
+  // Variant.hasMany(Image, { foreignKey: 'variant_id', as: 'varian_image', onDelete: 'CASCADE' });
+  // Image.belongsTo(Variant, { foreignKey: 'variant_id', as: 'variant' });
 
  // Attribute - AttributeValue (1-M)
  Attribute.hasMany(AttributeValue, { foreignKey: 'attribute_id', as: 'attribute_value', onDelete: 'CASCADE' });
