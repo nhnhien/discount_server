@@ -9,7 +9,8 @@ import Variant from './variant.js';
 import Attribute from './attribute.js';
 import AttributeValue from './attribute_value.js';
 import VariantValue from './variant_value.js';
+import Discount from './discount.js';
 
 setUpAssociations();
 
-export { sequelize, Role, User, Category, Market, Product, Variant, Attribute, AttributeValue, VariantValue };
+export { sequelize, Role, User, Category, Market, Product, Variant, Attribute, AttributeValue, VariantValue, Discount };

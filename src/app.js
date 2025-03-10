@@ -5,6 +5,7 @@ import productRouter from './router/product.js';
 import uploadRouter from './router/upload.js';
 import marketRouter from './router/market.js';
 import categoryRouter from './router/category.js';
+import discountRouter from './router/discount.js';
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.use('/api/product', productRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/category', categoryRouter);
+app.use('/api/discount', discountRouter);
 
 export default app;
