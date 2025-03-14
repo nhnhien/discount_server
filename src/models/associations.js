@@ -8,6 +8,11 @@ import AttributeValue from './attribute_value.js';
 import VariantValue from './variant_value.js';
 import Variant from './variant.js';
 import Discount from './discount.js';
+import CustomPricing from './custom_pricing.js';
+import CustomPricingMarket from './cp_market.js';
+import CustomPricingCustomer from './cp_customer.js';
+import CustomPricingProduct from './cp_product.js';
+import CustomPricingVariant from './cp_variant.js';
 
 const setUpAssociations = () => {
   // Role - User (1-M)
@@ -57,6 +62,30 @@ const setUpAssociations = () => {
   // Discount - Category (1-M)
   Category.hasMany(Discount, { foreignKey: 'apply_to_category_id', as: 'discounts', onDelete: 'CASCADE' });
   Discount.belongsTo(Category, { foreignKey: 'apply_to_category_id', as: 'category' });
+
+    //CustomPricing - Market (M-M)
+    CustomPricing.belongsToMany(Market, { through: CustomPricingMarket, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    Market.belongsToMany(CustomPricing, { through: CustomPricingMarket, foreignKey: 'market_id', onDelete: 'CASCADE' });
+  
+    //CustomPricing - Customer (M-M)
+    CustomPricing.belongsToMany(User, { through: CustomPricingCustomer, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    User.belongsToMany(CustomPricing, { through: CustomPricingCustomer, foreignKey: 'customer_id', onDelete: 'CASCADE' });
+  
+    //CustomPricing - Product (M-M)
+    CustomPricing.belongsToMany(Product, { through: CustomPricingProduct, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    Product.belongsToMany(CustomPricing, {
+      through: CustomPricingProduct,
+      foreignKey: 'product_id',
+      onDelete: 'CASCADE',
+    });
+  
+    //CustomPricing - Variant (M-M)
+    CustomPricing.belongsToMany(Variant, { through: CustomPricingVariant, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    Variant.belongsToMany(CustomPricing, {
+      through: CustomPricingVariant,
+      foreignKey: 'variant_id',
+      onDelete: 'CASCADE',
+    });
 };
 
 export default setUpAssociations;

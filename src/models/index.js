@@ -10,7 +10,29 @@ import Attribute from './attribute.js';
 import AttributeValue from './attribute_value.js';
 import VariantValue from './variant_value.js';
 import Discount from './discount.js';
+import CustomPricing from './custom_pricing.js';
+import CustomPricingCustomer from './cp_customer.js';
+import CustomPricingMarket from './cp_market.js';
+import CustomPricingProduct from './cp_product.js';
+import CustomPricingVariant from './cp_variant.js';
 
 setUpAssociations();
 
-export { sequelize, Role, User, Category, Market, Product, Variant, Attribute, AttributeValue, VariantValue, Discount };
+export {
+    sequelize,
+    Role,
+    User,
+    Category,
+    Market,
+    Product,
+    Variant,
+    Attribute,
+    AttributeValue,
+    VariantValue,
+    Discount,
+    CustomPricing,
+    CustomPricingCustomer,
+    CustomPricingMarket,
+    CustomPricingProduct,
+    CustomPricingVariant,
+  };
