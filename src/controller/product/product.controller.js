@@ -58,23 +58,53 @@ const formatProduct = (product) => {
   
 
 const getProduct = async (req, res) => {
-  const result = {
-    success: false,
-    message: 'Could not get products',
-  };
+  const { userId } = req.query;
   try {
     const products = await Product.findAll({
         include: productIncludeOptions,
     });    
-    if (products) {
-      result.success = true;
-      result.message = 'Get products successfully';
-      result.data = products.map(formatProduct);
+    if (!products || products.length === 0) {
+      return res.status(404).json({ success: false, message: 'No products found' });
     }
-    res.status(200).json(result);
-  } catch (error) {
-    res.status(500).json(result);
-  }
+
+    let pricingRules = [];
+    if (userId) {
+      pricingRules = await CustomPricingRule.findAll({
+        include: [
+          { model: User, where: { id: userId }, required: false },
+          { model: Product, required: false },
+        ],
+      });
+    }
+    const updatedProducts = products.map((product) => {
+      let discount = 0;
+      let appliedRule = null;
+
+      pricingRules.forEach((rule) => {
+        if (rule.Products.some((p) => p.id === product.id)) {
+          appliedRule = rule;
+          if (rule.discount_type === 'percentage') {
+            discount = (rule.discount_value / 100) * product.original_price;
+          } else if (rule.discount_type === 'fixed') {
+            discount = rule.discount_value;
+          }
+        }
+      });
+
+      return {
+        ...formatProduct(product),
+        original_price: product.original_price,
+        discountPercentage: appliedRule ? appliedRule.discount_value : 0,
+        final_price: Math.max(product.original_price - discount, 0),
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get products successfully',
+      data: updatedProducts,
+    });  } catch (error) {
+      return res.status(500).json({ success: false, message: error.message });  }
 };
 
 const getProductById = async (req, res) => {

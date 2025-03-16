@@ -1,4 +1,3 @@
-// models/user.model.js
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
@@ -11,18 +10,27 @@ const User = sequelize.define(
       autoIncrement: true,
       allowNull: false,
     },
-    username: {
+    firebase_uid: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
     },
-    password: {
+    email: {
       type: DataTypes.STRING,
       allowNull: false,
+      unique: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    avatar: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     phone: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       unique: true,
     },
     role_id: {

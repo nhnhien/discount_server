@@ -1,4 +1,5 @@
 import { CustomPricing } from '../../models/index.js';
+import sequelize from '../../config/database.js';
  import { Op } from 'sequelize';
  
  const getCPRules = async (req, res) => {

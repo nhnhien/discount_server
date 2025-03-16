@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import authRouter from './router/auth.js';
 import userRouter from './router/user.js';
 import productRouter from './router/product.js';
 import uploadRouter from './router/upload.js';
@@ -21,7 +22,7 @@ app.use(
 );
 
 //Routes
-
+app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/product', productRouter);
 app.use('/api/upload', uploadRouter);
