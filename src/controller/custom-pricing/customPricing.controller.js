@@ -93,7 +93,7 @@ import { Op } from 'sequelize';
  
      if (market_ids.length) await rule.setMarkets(market_ids, { transaction });
      if (customer_ids.length) await rule.setUsers(customer_ids, { transaction });
-    if (variant_ids.length) await rule.setVariants(variant_ids, { transaction });
+      if (variant_ids.length) await rule.setVariants(variant_ids, { transaction });
      if (product_ids.length) await rule.setProducts(product_ids, { transaction });
  
      await transaction.commit();
