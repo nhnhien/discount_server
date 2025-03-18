@@ -64,27 +64,61 @@ const setUpAssociations = () => {
   Discount.belongsTo(Category, { foreignKey: 'apply_to_category_id', as: 'category' });
 
     //CustomPricing - Market (M-M)
-    CustomPricing.belongsToMany(Market, { through: CustomPricingMarket, foreignKey: 'cp_id', onDelete: 'CASCADE' });
-    Market.belongsToMany(CustomPricing, { through: CustomPricingMarket, foreignKey: 'market_id', onDelete: 'CASCADE' });
+    CustomPricing.belongsToMany(Market, {
+      through: CustomPricingMarket,
+      foreignKey: 'cp_id',
+      onDelete: 'CASCADE',
+      as: 'markets',
+    });
+    Market.belongsToMany(CustomPricing, {
+      through: CustomPricingMarket,
+      foreignKey: 'market_id',
+      onDelete: 'CASCADE',
+      as: 'cpRules',
+    });
   
     //CustomPricing - Customer (M-M)
-    CustomPricing.belongsToMany(User, { through: CustomPricingCustomer, foreignKey: 'cp_id', onDelete: 'CASCADE' });
-    User.belongsToMany(CustomPricing, { through: CustomPricingCustomer, foreignKey: 'customer_id', onDelete: 'CASCADE' });
+    CustomPricing.belongsToMany(User, {
+      through: CustomPricingCustomer,
+      foreignKey: 'cp_id',
+      onDelete: 'CASCADE',
+      as: 'customers',
+    });
+    User.belongsToMany(CustomPricing, {
+      through: CustomPricingCustomer,
+      foreignKey: 'customer_id',
+      onDelete: 'CASCADE',
+      as: 'cpRules',
+    });
   
     //CustomPricing - Product (M-M)
-    CustomPricing.belongsToMany(Product, { through: CustomPricingProduct, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    CustomPricing.belongsToMany(Product, {
+      through: CustomPricingProduct,
+      foreignKey: 'cp_id',
+      onDelete: 'CASCADE',
+      as: 'products',
+    });
+    
     Product.belongsToMany(CustomPricing, {
       through: CustomPricingProduct,
       foreignKey: 'product_id',
       onDelete: 'CASCADE',
+      as: 'cpRules',
     });
   
     //CustomPricing - Variant (M-M)
-    CustomPricing.belongsToMany(Variant, { through: CustomPricingVariant, foreignKey: 'cp_id', onDelete: 'CASCADE' });
+    CustomPricing.belongsToMany(Variant, {
+      through: CustomPricingVariant,
+      foreignKey: 'cp_id',
+      onDelete: 'CASCADE',
+      as: 'variants',
+    });
+    
     Variant.belongsToMany(CustomPricing, {
       through: CustomPricingVariant,
       foreignKey: 'variant_id',
       onDelete: 'CASCADE',
+      as: 'cpRules',
     });
 };
 
