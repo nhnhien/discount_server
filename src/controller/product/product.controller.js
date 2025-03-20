@@ -67,7 +67,6 @@ const formatProduct = (product) => {
 
 const getProduct = async (req, res) => {
   const { userId } = req.query;
-  console.log(userId);
   try {
     const products = await Product.findAll({
         include: productIncludeOptions,
