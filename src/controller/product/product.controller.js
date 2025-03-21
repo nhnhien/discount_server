@@ -306,6 +306,7 @@ const updateProduct = async (req, res) => {
       stock_quantity,
       image_url,
       variants,
+      change_reason,
     } = req.body;
 
     const product = await Product.findByPk(id, { include: productIncludeOptions });
@@ -314,7 +315,10 @@ const updateProduct = async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
-
+    const priceChanged =
+       (original_price !== undefined && original_price !== product.original_price) ||
+       (final_price !== undefined && final_price !== product.final_price);
+ 
     await product.update(
       {
         name: name ?? product.name,
@@ -327,7 +331,11 @@ const updateProduct = async (req, res) => {
         stock_quantity: has_variant ? null : stock_quantity ?? product.stock_quantity,
         image_url: image_url ?? product.image_url,
       },
-      { transaction }
+      {
+        transaction,
+        user: req.user,
+        change_reason: change_reason || (priceChanged ? 'Cập nhật giá sản phẩm' : 'Cập nhật thông tin sản phẩm'),
+      }
     );
 
     if (has_variant && Array.isArray(variants)) {
@@ -350,7 +358,11 @@ const updateProduct = async (req, res) => {
             stock_quantity,
             image_url: variantImage || null,
           },
-          { transaction }
+          {
+            transaction,
+            user: req.user,
+            change_reason: change_reason || 'Tạo biến thể mới',
+          }
         );
 
         for (const attr of attributes) {

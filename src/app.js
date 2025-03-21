@@ -8,6 +8,7 @@ import marketRouter from './router/market.js';
 import categoryRouter from './router/category.js';
 import discountRouter from './router/discount.js';
 import cpRouter from './router/cp.js';
+import priceHistoryRouter from './router/priceHistory.js';
 
 const app = express();
 
@@ -30,5 +31,6 @@ app.use('/api/market', marketRouter);
 app.use('/api/category', categoryRouter);
 app.use('/api/discount', discountRouter);
 app.use('/api/cp', cpRouter);
+app.use('/api/price-history', priceHistoryRouter);
 
 export default app;

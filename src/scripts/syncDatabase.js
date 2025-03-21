@@ -5,7 +5,7 @@ setUpAssociations();
 const syncDatabase = async () => {
   try {
     await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
-    await sequelize.sync({ force: true });
+    await sequelize.sync({ alter: true });
     console.log('✅ Database synchronized successfully.');
   } catch (error) {
     console.error('❌ Database synchronization failed:', error);

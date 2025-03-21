@@ -13,6 +13,10 @@ import CustomPricingMarket from './cp_market.js';
 import CustomPricingCustomer from './cp_customer.js';
 import CustomPricingProduct from './cp_product.js';
 import CustomPricingVariant from './cp_variant.js';
+import CartItem from './cart_item.js';
+ import Cart from './cart.js';
+ import Address from './address.js';
+ import PriceHistory from './price_history.js';
 
 const setUpAssociations = () => {
   // Role - User (1-M)
@@ -120,6 +124,102 @@ const setUpAssociations = () => {
       onDelete: 'CASCADE',
       as: 'cpRules',
     });
+    // User - Address (1-M)
+   User.hasMany(Address, {
+    foreignKey: 'user_id',
+    as: 'addresses',
+    onDelete: 'CASCADE',
+  });
+  Address.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
+
+  // User - Cart (1-M)
+  User.hasMany(Cart, {
+    foreignKey: 'user_id',
+    as: 'carts',
+    onDelete: 'CASCADE',
+  });
+  Cart.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
+
+  // Cart - CartItem (1-M)
+  Cart.hasMany(CartItem, {
+    foreignKey: 'cart_id',
+    as: 'items',
+    onDelete: 'CASCADE',
+  });
+  CartItem.belongsTo(Cart, {
+    foreignKey: 'cart_id',
+    as: 'cart',
+  });
+
+  // Address - Cart (1-M)
+  Address.hasMany(Cart, {
+    foreignKey: 'shipping_address_id',
+    as: 'carts_shipping',
+    onDelete: 'SET NULL',
+  });
+  Cart.belongsTo(Address, {
+    foreignKey: 'shipping_address_id',
+    as: 'shipping_address',
+  });
+
+  // Product - CartItem (1-M)
+  Product.hasMany(CartItem, {
+    foreignKey: 'product_id',
+    as: 'cart_items',
+    onDelete: 'CASCADE',
+  });
+  CartItem.belongsTo(Product, {
+    foreignKey: 'product_id',
+    as: 'product',
+  });
+
+  // Variant - CartItem (1-M)
+  Variant.hasMany(CartItem, {
+    foreignKey: 'variant_id',
+    as: 'cart_items',
+    onDelete: 'CASCADE',
+  });
+  CartItem.belongsTo(Variant, {
+    foreignKey: 'variant_id',
+    as: 'variant',
+  });
+  // Product- PriceHistory
+  Product.hasMany(PriceHistory, {
+    foreignKey: 'product_id',
+    as: 'price_history',
+    onDelete: 'CASCADE',
+  });
+  PriceHistory.belongsTo(Product, {
+    foreignKey: 'product_id',
+    as: 'product',
+  });
+
+  // Variant - PriceHistory (1-M)
+  Variant.hasMany(PriceHistory, {
+    foreignKey: 'variant_id',
+    as: 'price_history',
+    onDelete: 'CASCADE',
+  });
+  PriceHistory.belongsTo(Variant, {
+    foreignKey: 'variant_id',
+    as: 'variant',
+  });
+  // User - PriceHistory (1-M)
+  User.hasMany(PriceHistory, {
+    foreignKey: 'changed_by',
+    as: 'price_changes',
+    onDelete: 'SET NULL',
+  });
+  PriceHistory.belongsTo(User, {
+    foreignKey: 'changed_by',
+    as: 'user',
+  });
 };
 
 export default setUpAssociations;
