@@ -24,8 +24,8 @@ const setUpAssociations = () => {
   Product.belongsTo(Market, { foreignKey: 'market_id' });
 
   // Category - Product (1-M)
-  Category.hasMany(Product, { foreignKey: 'category_id', onDelete: 'CASCADE' });
-  Product.belongsTo(Category, { foreignKey: 'category_id' });
+  Category.hasMany(Product, { foreignKey: 'category_id', as: 'products', onDelete: 'CASCADE' });
+  Product.belongsTo(Category, { foreignKey: 'category_id', as: 'category' });
 
   // Product - Variant (1-M)
   Product.hasMany(Variant, { foreignKey: 'product_id', as: 'variants', onDelete: 'CASCADE' });
