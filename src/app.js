@@ -9,6 +9,8 @@ import categoryRouter from './router/category.js';
 import discountRouter from './router/discount.js';
 import cpRouter from './router/cp.js';
 import priceHistoryRouter from './router/priceHistory.js';
+import qbRouter from './router/qb.js';
+import cartRouter from './router/cart.js';
 
 const app = express();
 
@@ -32,5 +34,7 @@ app.use('/api/category', categoryRouter);
 app.use('/api/discount', discountRouter);
 app.use('/api/cp', cpRouter);
 app.use('/api/price-history', priceHistoryRouter);
+app.use('/api/qb', qbRouter);
+app.use('/api/cart', cartRouter);
 
 export default app;

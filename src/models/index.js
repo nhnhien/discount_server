@@ -19,6 +19,11 @@ import Cart from './cart.js';
 import CartItem from './cart_item.js';
 import Address from './address.js';
 import PriceHistory from './price_history.js';
+import QuantityBreak from './quantity_break.js';
+import QBCustomer from './qb_customer.js';
+import QBMarket from './qb_market.js';
+import QBProduct from './qb_product.js';
+import QBVariant from './qb_variant.js';
 
 setUpAssociations();
 
@@ -43,4 +48,9 @@ export {
   CartItem,
   Address,
   PriceHistory,
+  QuantityBreak,
+  QBCustomer,
+  QBMarket,
+  QBProduct,
+  QBVariant,
 };

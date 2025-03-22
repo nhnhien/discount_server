@@ -157,7 +157,7 @@ const getProduct = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-
+    const { userId } = req.query;
     const product = await Product.findOne({
       where: { id },
       include: productIncludeOptions,
@@ -166,9 +166,69 @@ const getProductById = async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
-    return res
-      .status(200)
-      .json({ success: true, message: 'Product retrieved successfully', data: formatProduct(product) });
+    // Xử lý custom pricing
+    let appliedRule = null;
+    let finalPrice = product.original_price;
+
+    if (userId) {
+      const pricingRules = await CustomPricing.findAll({
+        include: [
+          { model: User, as: 'customers', where: { id: userId }, required: false },
+          { model: Product, as: 'products', where: { id }, required: false },
+        ],
+      });
+
+      // Tìm quy tắc giá phù hợp
+      let maxDiscount = 0;
+      pricingRules.forEach((rule) => {
+        if (rule.products.some((p) => p.id === product.id)) {
+          let discount = 0;
+
+          if (rule.discount_type === 'percentage') {
+            discount = (rule.discount_value / 100) * product.original_price;
+          } else if (rule.discount_type === 'fixed') {
+            discount = rule.discount_value;
+          }
+
+          if (discount > maxDiscount) {
+            maxDiscount = discount;
+            appliedRule = rule;
+          }
+        }
+      });
+
+      // Tính toán giá cuối cùng
+      finalPrice = Math.max(product.original_price - maxDiscount, 0);
+    }
+
+    // Định dạng sản phẩm với giá cuối cùng
+    const formattedProduct = formatProduct({
+      ...product.toJSON(),
+      original_price: product.original_price,
+      final_price: finalPrice,
+    });
+
+    // Thêm thông tin về quy tắc giá áp dụng
+    const responseData = {
+      ...formattedProduct,
+      discountPercentage: appliedRule ? appliedRule.discount_value : 0,
+      appliedRule: appliedRule
+        ? {
+            id: appliedRule.id,
+            name: appliedRule.name,
+            discount_type: appliedRule.discount_type,
+            discount_value: appliedRule.discount_value,
+            start_date: appliedRule.start_date,
+            end_date: appliedRule.end_date,
+          }
+        : null,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Product retrieved successfully',
+      data: responseData,
+    });
   } catch (error) {
     console.error('Error in getProductById:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
@@ -316,9 +376,9 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     const priceChanged =
-       (original_price !== undefined && original_price !== product.original_price) ||
-       (final_price !== undefined && final_price !== product.final_price);
- 
+      (original_price !== undefined && original_price !== product.original_price) ||
+      (final_price !== undefined && final_price !== product.final_price);
+
     await product.update(
       {
         name: name ?? product.name,
