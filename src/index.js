@@ -4,7 +4,7 @@ import AttributeValue from './models/attribute_value.js';
 import Product from './models/product.js';
 import Variant from './models/variant.js';
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8005;
 
 (async () => {
   try {

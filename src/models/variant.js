@@ -60,57 +60,130 @@ const Variant = sequelize.define(
     underscored: true,
   }
 );
+
 Variant.beforeUpdate(async (variant, options) => {
-  if (variant.changed('original_price') || variant.changed('final_price')) {
-    const oldVariant = await Variant.findByPk(variant.id);
-    if (variant.changed('original_price')) {
-      await PriceHistory.create({
-        product_id: variant.product_id,
-        variant_id: variant.id,
-        old_price: oldVariant.original_price || 0,
-        new_price: variant.original_price || 0,
-        changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Cập nhật giá gốc biến thể',
-        price_type: 'original',
-      });
+  try {
+    if (variant.changed('original_price') || variant.changed('final_price')) {
+      const oldOriginalPrice = variant.previous('original_price') || 0;
+      const oldFinalPrice = variant.previous('final_price') || 0;
+
+      const newOriginalPrice = variant.original_price || 0;
+      const newFinalPrice = variant.final_price || 0;
+
+      const historyRecords = [];
+
+      if (variant.changed('original_price')) {
+        historyRecords.push({
+          product_id: variant.product_id,
+          variant_id: variant.id,
+          old_price: oldOriginalPrice,
+          new_price: newOriginalPrice,
+          changed_by: options.user?.id || null,
+          change_reason: options.change_reason || 'Cập nhật giá gốc biến thể',
+          price_type: 'original',
+        });
+      }
+
+      if (variant.changed('final_price')) {
+        historyRecords.push({
+          product_id: variant.product_id,
+          variant_id: variant.id,
+          old_price: oldFinalPrice,
+          new_price: newFinalPrice,
+          changed_by: options.user?.id || null,
+          change_reason: options.change_reason || 'Cập nhật giá bán biến thể',
+          price_type: 'final',
+        });
+      }
+
+      const transaction = options.transaction;
+
+      if (transaction) {
+        await Promise.all(historyRecords.map((record) => PriceHistory.create(record, { transaction })));
+      } else {
+        for (const record of historyRecords) {
+          await createWithRetry(async () => PriceHistory.create(record), 3);
+        }
+      }
     }
-    if (variant.changed('final_price')) {
-      await PriceHistory.create({
-        product_id: variant.product_id,
-        variant_id: variant.id,
-        old_price: oldVariant.final_price || 0,
-        new_price: variant.final_price || 0,
-        changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Cập nhật giá bán biến thể',
-        price_type: 'final',
-      });
-    }
+  } catch (error) {
+    console.error('Error in Variant.beforeUpdate hook:', error);
   }
 });
 
 Variant.afterCreate(async (variant, options) => {
-  if (variant.original_price) {
-    await PriceHistory.create({
-      product_id: variant.product_id,
-      variant_id: variant.id,
-      old_price: 0,
-      new_price: variant.original_price,
-      changed_by: options.user?.id || null,
-      change_reason: options.change_reason || 'Tạo biến thể mới',
-      price_type: 'original',
-    });
-  }
+  try {
+    const historyRecords = [];
 
-  if (variant.final_price) {
-    await PriceHistory.create({
-      product_id: variant.product_id,
-      variant_id: variant.id,
-      old_price: 0,
-      new_price: variant.final_price,
-      changed_by: options.user?.id || null,
-      change_reason: options.change_reason || 'Tạo biến thể mới',
-      price_type: 'final',
-    });
+    if (variant.original_price) {
+      historyRecords.push({
+        product_id: variant.product_id,
+        variant_id: variant.id,
+        old_price: 0,
+        new_price: variant.original_price,
+        changed_by: options.user?.id || null,
+        change_reason: options.change_reason || 'Tạo biến thể mới',
+        price_type: 'original',
+      });
+    }
+
+    if (variant.final_price) {
+      historyRecords.push({
+        product_id: variant.product_id,
+        variant_id: variant.id,
+        old_price: 0,
+        new_price: variant.final_price,
+        changed_by: options.user?.id || null,
+        change_reason: options.change_reason || 'Tạo biến thể mới',
+        price_type: 'final',
+      });
+    }
+
+    const transaction = options.transaction;
+
+    if (transaction) {
+      await Promise.all(historyRecords.map((record) => PriceHistory.create(record, { transaction })));
+    } else {
+      await sequelize
+        .transaction(async (t) => {
+          await Promise.all(historyRecords.map((record) => PriceHistory.create(record, { transaction: t })));
+        })
+        .catch(async (error) => {
+          if (error.parent && error.parent.code === 'ER_LOCK_WAIT_TIMEOUT') {
+            for (const record of historyRecords) {
+              await createWithRetry(async () => PriceHistory.create(record), 3);
+            }
+          } else {
+            throw error;
+          }
+        });
+    }
+  } catch (error) {
+    console.error('Error in Variant.afterCreate hook:', error);
   }
 });
+
+async function createWithRetry(createFn, maxRetries = 3) {
+  let retryCount = 0;
+  while (retryCount < maxRetries) {
+    try {
+      return await createFn();
+    } catch (error) {
+      if (
+        error.name === 'SequelizeDatabaseError' &&
+        error.parent &&
+        (error.parent.code === 'ER_LOCK_WAIT_TIMEOUT' || error.parent.errno === 1205) &&
+        retryCount < maxRetries - 1
+      ) {
+        retryCount++;
+        const delay = 500 * Math.pow(2, retryCount);
+        console.log(`Đang thử lại lần ${retryCount} sau ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export default Variant;

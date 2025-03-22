@@ -37,8 +37,7 @@ const setUpAssociations = () => {
 
   // Product - Variant (1-M)
   Product.hasMany(Variant, { foreignKey: 'product_id', as: 'variants', onDelete: 'CASCADE' });
-  Variant.belongsTo(Product, { foreignKey: 'product_id' });
-
+  Variant.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
   // // Product - Image (1-M)
   // Product.hasMany(Image, { foreignKey: 'product_id', as: 'product_image', onDelete: 'CASCADE' });
   // Image.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
