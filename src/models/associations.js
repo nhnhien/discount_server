@@ -22,6 +22,12 @@ import QBCustomer from './qb_customer.js';
 import QBMarket from './qb_market.js';
 import QBProduct from './qb_product.js';
 import QBVariant from './qb_variant.js';
+import DiscountCustomer from './discount-customer.js';
+ import DiscountVariant from './discount-variant.js';
+ import DiscountProduct from './discount-product.js';
+ import Order from './order.js';
+ import OrderItem from './order_item.js';
+ import Delivery from './delivery.js';
 const setUpAssociations = () => {
   // Role - User (1-M)
   Role.hasMany(User, { foreignKey: 'role_id', onDelete: 'CASCADE' });
@@ -57,18 +63,6 @@ const setUpAssociations = () => {
   // AttributeValue - VariantValue (1-M)
   AttributeValue.hasMany(VariantValue, { foreignKey: 'attribute_value_id', as: 'variant_value', onDelete: 'CASCADE' });
   VariantValue.belongsTo(AttributeValue, { foreignKey: 'attribute_value_id', as: 'attribute_value' });
-
-  // Discount - Product (1-M)
-  Product.hasMany(Discount, { foreignKey: 'apply_to_product_id', as: 'discounts', onDelete: 'CASCADE' });
-  Discount.belongsTo(Product, { foreignKey: 'apply_to_product_id', as: 'product' });
-
-  // Discount - Variant (1-M)
-  Variant.hasMany(Discount, { foreignKey: 'apply_to_variant_id', as: 'discounts', onDelete: 'CASCADE' });
-  Discount.belongsTo(Variant, { foreignKey: 'apply_to_variant_id', as: 'variant' });
-
-  // Discount - Category (1-M)
-  Category.hasMany(Discount, { foreignKey: 'apply_to_category_id', as: 'discounts', onDelete: 'CASCADE' });
-  Discount.belongsTo(Category, { foreignKey: 'apply_to_category_id', as: 'category' });
 
   //CustomPricing - Market (M-M)
   CustomPricing.belongsToMany(Market, {
@@ -290,6 +284,90 @@ const setUpAssociations = () => {
     as: 'quantity_breaks',
     onDelete: 'CASCADE',
   });
+
+//Discount-Product
+Discount.belongsToMany(Product, {
+  through: DiscountProduct,
+  foreignKey: 'discount_id',
+  otherKey: 'product_id',
+  as: 'products',
+});
+
+Product.belongsToMany(Discount, {
+  through: DiscountProduct,
+  foreignKey: 'product_id',
+  otherKey: 'discount_id',
+  as: 'discounts',
+});
+//Discount-Variant
+Discount.belongsToMany(Variant, {
+  through: DiscountVariant,
+  foreignKey: 'discount_id',
+  otherKey: 'variant_id',
+  as: 'variants',
+});
+
+Variant.belongsToMany(Discount, {
+  through: DiscountVariant,
+  foreignKey: 'variant_id',
+  otherKey: 'discount_id',
+  as: 'discounts',
+});
+//Discount-User
+
+Discount.belongsToMany(User, {
+  through: DiscountCustomer,
+  foreignKey: 'discount_id',
+  otherKey: 'user_id',
+  as: 'customers',
+});
+
+User.belongsToMany(Discount, {
+  through: DiscountCustomer,
+  foreignKey: 'user_id',
+  otherKey: 'discount_id',
+  as: 'discounts',
+});
+
+User.hasMany(Order, { foreignKey: 'user_id', as: 'orders' });
+Order.belongsTo(User, { foreignKey: 'user_id', as: 'customer' });
+
+// Order - Address (Billing)
+Order.belongsTo(Address, { foreignKey: 'billing_address_id', as: 'billingAddress' });
+Address.hasMany(Order, { foreignKey: 'billing_address_id', as: 'billingOrders' });
+
+// Order - Address (Shipping)
+Order.belongsTo(Address, { foreignKey: 'shipping_address_id', as: 'shippingAddress' });
+Address.hasMany(Order, { foreignKey: 'shipping_address_id', as: 'shippingOrders' });
+
+// Order - Discount
+Order.belongsTo(Discount, { foreignKey: 'discount_id' });
+Discount.hasMany(Order, { foreignKey: 'discount_id', as: 'orders' });
+
+// Order - OrderItem (1-M)
+Order.hasMany(OrderItem, { foreignKey: 'order_id', as: 'items', onDelete: 'CASCADE' });
+OrderItem.belongsTo(Order, { foreignKey: 'order_id' });
+
+// OrderItem - Product (M-1)
+Product.hasMany(OrderItem, { foreignKey: 'product_id' });
+OrderItem.belongsTo(Product, { foreignKey: 'product_id' });
+
+// OrderItem - Variant (M-1)
+Variant.hasMany(OrderItem, { foreignKey: 'variant_id' });
+OrderItem.belongsTo(Variant, { foreignKey: 'variant_id' });
+
+// Order - Delivery (1-1)
+Order.hasOne(Delivery, { foreignKey: 'order_id', as: 'delivery', onDelete: 'CASCADE' });
+Delivery.belongsTo(Order, { foreignKey: 'order_id' });
+
+// Delivery - User (updated_by)
+Delivery.belongsTo(User, { foreignKey: 'updated_by', as: 'updatedByUser' });
+User.hasMany(Delivery, { foreignKey: 'updated_by', as: 'updatedDeliveries' });
+
+// Order - User (updated_by)
+Order.belongsTo(User, { foreignKey: 'updated_by', as: 'updatedByUser' });
+User.hasMany(Order, { foreignKey: 'updated_by', as: 'updatedOrders' });
+
 };
 
 export default setUpAssociations;

@@ -1,8 +1,5 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
-import Variant from './variant.js';
-import Product from './product.js';
-import Category from './category.js';
 
 const Discount = sequelize.define(
   'Discount',
@@ -18,13 +15,42 @@ const Discount = sequelize.define(
       allowNull: false,
       unique: true,
     },
+    title: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     discount_type: {
-      type: DataTypes.ENUM('percentage', 'fixed'),
+      type: DataTypes.ENUM('percentage', 'fixed', 'free_shipping'),
       allowNull: false,
     },
     value: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
+    },
+    min_order_amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
+    max_discount_amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
+    usage_limit: {
+      type: DataTypes.INTEGER,
+
+      allowNull: true,
+    },
+    usage_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
     start_date: {
       type: DataTypes.DATE,
@@ -32,33 +58,13 @@ const Discount = sequelize.define(
     },
     end_date: {
       type: DataTypes.DATE,
-      allowNull: false,
-    },
-    apply_to_product_id: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: Product,
-        key: 'id',
-      },
-      allowNull: true,
-    },
-    apply_to_variant_id: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: Variant,
-        key: 'id',
-      },
-      allowNull: true,
-    },
-    apply_to_category_id: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: Category,
-        key: 'id',
-      },
       allowNull: true,
     },
     created_at: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
     },
@@ -66,6 +72,7 @@ const Discount = sequelize.define(
   {
     tableName: 'discount',
     timestamps: false,
+    underscored: true,
   }
 );
 

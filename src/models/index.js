@@ -24,7 +24,12 @@ import QBCustomer from './qb_customer.js';
 import QBMarket from './qb_market.js';
 import QBProduct from './qb_product.js';
 import QBVariant from './qb_variant.js';
-
+import DiscountCustomer from './discount-customer.js';
+import DiscountProduct from './discount-product.js';
+import DiscountVariant from './discount-variant.js';
+import Order from './order.js';
+import OrderItem from './order_item.js';
+import Delivery from './delivery.js';
 setUpAssociations();
 
 export {
@@ -53,4 +58,10 @@ export {
   QBMarket,
   QBProduct,
   QBVariant,
+  DiscountCustomer,
+  DiscountProduct,
+  DiscountVariant,
+  Order,
+  OrderItem,
+  Delivery,
 };
