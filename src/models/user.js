@@ -17,7 +17,8 @@ const User = sequelize.define(
     },
     email: {
       type: DataTypes.STRING,
-      allowNull: false,
+      // allowNull: false,
+      allowNull: true,
       unique: true,
     },
     name: {
@@ -41,6 +42,10 @@ const User = sequelize.define(
         key: 'id',
       },
     },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
   },
   {
     tableName: 'user',
@@ -48,4 +53,5 @@ const User = sequelize.define(
     underscored: true,
   }
 );
+
 export default User;
