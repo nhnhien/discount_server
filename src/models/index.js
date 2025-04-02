@@ -30,6 +30,8 @@ import DiscountVariant from './discount-variant.js';
 import Order from './order.js';
 import OrderItem from './order_item.js';
 import Delivery from './delivery.js';
+import Payment from './payment.js';
+
 setUpAssociations();
 
 export {
@@ -64,4 +66,5 @@ export {
   Order,
   OrderItem,
   Delivery,
+  Payment,
 };

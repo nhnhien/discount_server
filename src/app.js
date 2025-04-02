@@ -13,6 +13,7 @@ import qbRouter from './router/qb.js';
 import cartRouter from './router/cart.js';
 import orderRouter from './router/order.js';
 import addressRouter from './router/address.js';
+import paymentRouter from './router/payment.js';
 
 const app = express();
 
@@ -41,5 +42,6 @@ app.use('/api/qb', qbRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/order', orderRouter);
 app.use('/api/address', addressRouter);
+app.use('/api/payment', paymentRouter);
 
 export default app;
