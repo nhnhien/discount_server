@@ -1,12 +1,16 @@
 import { Op } from 'sequelize';
-import { Order, User, Address, Product, Variant, Delivery, OrderItem, Discount, sequelize } from '../../models/index.js';
+import { Order, User, Address, Product, Variant, Cart, CartItem, Delivery, OrderItem, Discount, sequelize } from '../../models/index.js';
+import { calculatePrice } from '../../util/calculatePrice.js';
+
 
 export const getOrders = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, payment_status, start_date, end_date, search } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const whereClause = {};
+    const whereClause = {
+      user_id: req.user.id, // ✅ Lọc theo user hiện tại
+    };
 
     if (status) {
       whereClause.status = status;
@@ -30,22 +34,12 @@ export const getOrders = async (req, res) => {
       };
     }
 
-    if (search) {
-      whereClause[Op.or] = [
-        { order_number: { [Op.like]: `%${search}%` } },
-        { '$customer.name$': { [Op.like]: `%${search}%` } },
-        { '$customer.email$': { [Op.like]: `%${search}%` } },
-        { '$customer.phone$': { [Op.like]: `%${search}%` } },
-      ];
-    }
-
     const { rows: orders, count } = await Order.findAndCountAll({
       where: whereClause,
       include: [
         {
           model: User,
           as: 'customer',
-          required: !!search,
           attributes: ['id', 'name', 'email', 'phone'],
         },
         {
@@ -103,6 +97,7 @@ export const getOrders = async (req, res) => {
     });
   }
 };
+
 
 export const getOrderById = async (req, res) => {
   try {
@@ -279,67 +274,73 @@ export const createOrder = async (req, res) => {
     let taxAmount = 0;
     let shippingFee = 0;
     const orderItems = [];
+    
     for (const item of items) {
       const { product_id, variant_id, quantity } = item;
-
+    
       if (!product_id || !quantity || quantity <= 0) {
+        await transaction.rollback();
         return res.status(400).json({
           success: false,
           message: 'Thông tin sản phẩm không hợp lệ',
         });
       }
+    
       const product = await Product.findByPk(product_id);
       if (!product) {
+        await transaction.rollback();
         return res.status(404).json({
           success: false,
           message: `Không tìm thấy sản phẩm với ID: ${product_id}`,
         });
       }
-
-      let variantData = null;
+    
+      let variant = null;
       let unitPrice = 0;
       let originalPrice = 0;
       let sku = product.sku || '';
       let itemName = product.name;
       let variantName = '';
+    
       if (variant_id) {
-        variantData = await Variant.findOne({
-          where: {
-            id: variant_id,
-            product_id,
-          },
-        });
-
-        if (!variantData) {
+        variant = await Variant.findOne({ where: { id: variant_id, product_id } });
+        if (!variant) {
+          await transaction.rollback();
           return res.status(404).json({
             success: false,
-            message: `Không tìm thấy biến thể với ID: ${variant_id} cho sản phẩm này`,
+            message: `Không tìm thấy biến thể với ID: ${variant_id}`,
           });
         }
-        if (variantData.stock_quantity < quantity) {
+        if (variant.stock_quantity < quantity) {
+          await transaction.rollback();
           return res.status(400).json({
             success: false,
-            message: `Số lượng yêu cầu (${quantity}) vượt quá số lượng tồn kho (${variantData.stock_quantity}) của biến thể`,
+            message: `Tồn kho không đủ cho biến thể: ${variant_id}`,
           });
         }
+    
+        const priceData = await calculatePrice(req.user.id, product_id, variant_id, quantity, transaction);
 
-        unitPrice = variantData.final_price;
-        originalPrice = variantData.original_price;
-        sku = variantData.sku;
-        variantName = variantData.name || '';
+        unitPrice = priceData.finalPrice;
+        originalPrice = priceData.originalPrice;
+        sku = variant.sku;
       } else {
         if (product.stock_quantity < quantity) {
+          await transaction.rollback();
           return res.status(400).json({
             success: false,
-            message: `Số lượng yêu cầu (${quantity}) vượt quá số lượng tồn kho (${product.stock_quantity}) của sản phẩm`,
+            message: `Tồn kho không đủ cho sản phẩm: ${product_id}`,
           });
         }
-
-        unitPrice = product.final_price;
-        originalPrice = product.original_price;
+    
+        const priceData = await calculatePrice(req.user.id, product_id, null, quantity, transaction);
+        unitPrice = priceData.finalPrice;
+        originalPrice = priceData.originalPrice;
       }
+    
       const itemSubtotal = unitPrice * quantity;
       subtotal += itemSubtotal;
+    
       orderItems.push({
         product_id,
         variant_id,
@@ -350,9 +351,10 @@ export const createOrder = async (req, res) => {
         product_name: itemName,
         variant_name: variantName,
         sku,
-        item_discount: 0,
+        item_discount: originalPrice - unitPrice,
       });
     }
+    
     if (discount) {
       switch (discount.discount_type) {
         case 'percentage':
@@ -466,6 +468,15 @@ export const createOrder = async (req, res) => {
     );
 
     await transaction.commit();
+
+    // 🧹 Xoá những cart item đã được mua
+    if (req.body.cart_item_ids && req.body.cart_item_ids.length > 0) {
+      await CartItem.destroy({
+        where: {
+          id: req.body.cart_item_ids,
+        },
+      });
+    }
 
     // Truy vấn lại order để trả về kết quả chi tiết
     const createdOrder = await Order.findByPk(order.id, {
