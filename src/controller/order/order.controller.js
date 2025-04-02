@@ -45,6 +45,7 @@ export const getOrders = async (req, res) => {
         {
           model: User,
           as: 'customer',
+          required: !!search,
           attributes: ['id', 'name', 'email', 'phone'],
         },
         {
@@ -608,7 +609,9 @@ export const updateOrderStatus = async (req, res) => {
             { model: Variant, attributes: ['id', 'sku'] },
           ],
         },
-        { model: Delivery },
+        { model: Delivery,
+          as: 'delivery',
+         },
         {
           model: User,
           as: 'updatedByUser',
@@ -623,7 +626,14 @@ export const updateOrderStatus = async (req, res) => {
       data: updatedOrder,
     });
   } catch (error) {
-    await transaction.rollback();
+    try {
+      if (transaction && transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
+        await transaction.rollback();
+      }
+    } catch (rollbackError) {
+      console.error('Rollback failed:', rollbackError.message);
+    }
+  
     console.error('Error in updateOrderStatus:', error);
     return res.status(500).json({
       success: false,

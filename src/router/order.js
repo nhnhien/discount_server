@@ -9,7 +9,7 @@ import {
   cancelOrder,
   getOrderStatistics,
 } from '../controller/order/order.controller.js';
-import verifyFirebaseToken from '../middleware/auth.middleware.js'; // 👈 Thêm dòng này
+import verifyFirebaseToken from '../middleware/auth.middleware.js'; 
 
 const router = express.Router();
 router.use(verifyFirebaseToken);
@@ -18,8 +18,7 @@ router.get('/statistics', getOrderStatistics);
 router.get('/:id', getOrderById);
 router.post('/', createOrder);
 router.patch('/:id/status', updateOrderStatus);
-// router.patch('/:id/payment', updatePaymentStatus);
-// router.patch('/:id/delivery', updateDelivery);
-router.delete('/:id', cancelOrder);
-
+router.patch('/:id/payment', updatePaymentStatus);
+router.patch('/:id/delivery', updateDelivery);
+router.post('/:id/cancel', cancelOrder);
 export default router;

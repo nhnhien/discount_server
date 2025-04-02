@@ -28,6 +28,7 @@ const verifyFirebaseToken = async (req, res, next) => {
       username: decodedToken.name || decodedToken.email.split('@')[0],
       phone: decodedToken.phone_number || null,
       avatar: decodedToken.picture || null,
+      role: userRecord.role || 'admin',
     };
 
     console.log('[Middleware] ✅ Xác thực thành công. User ID:', req.user.id);

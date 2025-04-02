@@ -5,6 +5,7 @@ import { Op } from 'sequelize';
 export const getQuantityBreaks = async (req, res) => {
   try {
     const { product_id, variant_id, customer_id, market_id } = req.query;
+    const whereCondition = {};
 
     const includeOptions = [
       {
