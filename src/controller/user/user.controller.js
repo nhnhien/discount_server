@@ -1,5 +1,6 @@
 import User from '../../models/user.js';
 import { Op } from 'sequelize';
+import Role from '../../models/role.js'; // nếu chưa import
 
 const getUser = async (req, res) => {
   try {
@@ -45,12 +46,13 @@ const syncUser = async (req, res) => {
   try {
     const { uid, email, username, phone, avatar } = req.user;
 
-    // ✅ Fallback tên hợp lý
     const fallbackUsername =
-      username ||
-      (email ? email.split('@')[0] : phone || `user-${uid.slice(-4)}`);
+      username || (email ? email.split('@')[0] : phone || `user-${uid.slice(-4)}`);
 
-    let user = await User.findOne({ where: { firebase_uid: uid } });
+    let user = await User.findOne({
+      where: { firebase_uid: uid },
+      include: [{ model: Role, as: 'role' }],
+    });
 
     if (!user) {
       user = await User.create({
@@ -59,18 +61,48 @@ const syncUser = async (req, res) => {
         name: fallbackUsername,
         phone: phone || null,
         avatar: avatar || null,
-        role_id: 2, // Khách hàng mặc định
+        role_id: 2, // customer
         is_active: true,
       });
+
+      // Fetch lại để lấy role
+      user = await User.findOne({
+        where: { firebase_uid: uid },
+        include: [{ model: Role, as: 'role' }],
+      });
+    } else {
+      // 👇 Nếu user đã tồn tại, kiểm tra avatar và name có cần cập nhật không
+      let hasChanged = false;
+
+      if (avatar && user.avatar !== avatar) {
+        user.avatar = avatar;
+        hasChanged = true;
+      }
+
+      if (fallbackUsername && user.name !== fallbackUsername) {
+        user.name = fallbackUsername;
+        hasChanged = true;
+      }
+
+      if (hasChanged) {
+        await user.save();
+      }
     }
 
-    return res.status(200).json({ user });
-  } catch (error) {
-    console.error('[syncUser] ❌ Lỗi đồng bộ:', error);
-    return res.status(500).json({
-      message: 'Lỗi đồng bộ user',
-      error: error.message,
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role_id: user.role_id,
+        role: user.role?.name || '',
+        avatar: user.avatar || null, // ✅ trả về avatar để hiển thị lên frontend
+      },
     });
+  } catch (error) {
+    console.error('[syncUser] ❌', error);
+    return res.status(500).json({ message: 'Lỗi đồng bộ user' });
   }
 };
 

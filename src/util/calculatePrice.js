@@ -1,169 +1,159 @@
-import { Product, Variant, User, CustomPricing, QuantityBreak } from '../models/index.js';
+import { Product, Variant, CustomPricing, QuantityBreak, User } from '../models/index.js';
 import { Op } from 'sequelize';
 
-export const calculatePrice = async (userId, productId, variantId = null, quantity = 1, transaction = null) => {
-  let product, variant, originalPrice, finalPrice;
+export const calculatePrice = async (userId, productId, variantId = null, quantity = 1, options = {}) => {
+  const applyQuantityBreak = options.applyQuantityBreak !== false; // default: true
+
+  let originalPrice = 0;
+  let finalPrice = 0;
   let appliedRule = null;
+  const effectiveUserId = userId || null;
 
-  if (!quantity || quantity <= 0) quantity = 1;
+  // 1️⃣ Lấy giá gốc
+  const item = variantId
+    ? await Variant.findByPk(variantId)
+    : await Product.findByPk(productId);
 
-  // Lấy giá gốc từ product hoặc variant
-  if (variantId) {
-    variant = await Variant.findByPk(variantId, { transaction });
-    if (!variant) throw new Error('Variant not found');
-    originalPrice = parseFloat(variant.original_price);
-    finalPrice = parseFloat(variant.final_price);
-  } else {
-    product = await Product.findByPk(productId, { transaction });
-    if (!product) throw new Error('Product not found');
-    originalPrice = parseFloat(product.original_price);
-    finalPrice = parseFloat(product.final_price);
-  }
+  if (!item) return { originalPrice: 0, finalPrice: 0, appliedRule: null, discountAmount: 0 };
 
-  // ===== ƯU TIÊN 1: Price List =====
-  const priceListRules = await CustomPricing.findAll({
+  originalPrice = Number(item.original_price) || 0;
+  finalPrice = originalPrice;
+
+  // 2️⃣ Custom Pricing (bao gồm cả Price List)
+  const cpRules = await CustomPricing.findAll({
     where: {
-      is_price_list: true,
       start_date: { [Op.lte]: new Date() },
-      [Op.or]: [{ end_date: null }, { end_date: { [Op.gte]: new Date() } }],
+      end_date: { [Op.gte]: new Date() },
     },
     include: [
-      {
-        model: User,
-        as: 'customers',
-        required: false,
-        where: userId ? { id: userId } : undefined, // ✅ Cho phép rule dùng cho all users
-      },
-      {
-        model: Product,
-        as: 'products',
-        where: productId ? { id: productId } : undefined,
-        required: false,
-        through: { attributes: ['amount'] },
-      },
-      {
-        model: Variant,
-        as: 'variants',
-        where: variantId ? { id: variantId } : undefined,
-        required: false,
-        through: { attributes: ['amount'] },
-      },
+      { model: User, as: 'customers', required: false },
+      { model: Product, as: 'products', through: { attributes: ['amount'] }, required: false },
+      { model: Variant, as: 'variants', through: { attributes: ['amount'] }, required: false },
     ],
-    transaction,
   });
 
-  for (const rule of priceListRules) {
-    const match = variantId
-      ? rule.variants.find(v => v.id === variantId)
-      : rule.products.find(p => p.id === productId);
+  const filteredRules = cpRules.filter(rule => {
+    if (rule.customers.length > 0) {
+      return rule.customers.some(c => c.id === effectiveUserId);
+    }
+    return true;
+  });
 
-    const priceFromAmount = variantId
-      ? match?.CustomPricingVariant?.amount
-      : match?.CustomPricingProduct?.amount;
+  for (const rule of filteredRules) {
+    rule.amounts = [];
 
-    if (priceFromAmount !== undefined && priceFromAmount !== null) {
-      finalPrice = parseFloat(priceFromAmount);
+    rule.products?.forEach(p => {
+      if (p.CustomPricingProduct?.amount != null) {
+        rule.amounts.push({ product_id: p.id, amount: Number(p.CustomPricingProduct.amount) });
+      }
+    });
+
+    rule.variants?.forEach(v => {
+      if (v.CustomPricingVariant?.amount != null) {
+        rule.amounts.push({ variant_id: v.id, amount: Number(v.CustomPricingVariant.amount) });
+      }
+    });
+  }
+
+  // 3️⃣ Áp dụng Price List nếu có
+  for (const rule of filteredRules.filter(r => r.is_price_list)) {
+    const priceByAmount = rule.amounts.find(a =>
+      variantId ? a.variant_id === variantId : a.product_id === productId
+    );
+
+    if (priceByAmount) {
+      finalPrice = priceByAmount.amount;
       appliedRule = rule;
       break;
     }
   }
 
-  // ===== ƯU TIÊN 2: Quantity Break =====
-  if (!appliedRule) {
+  // 4️⃣ Áp dụng Quantity Break nếu chưa có rule khác và được phép
+  if (applyQuantityBreak && finalPrice === originalPrice) {
     const qbRules = await QuantityBreak.findAll({
       where: {
         start_date: { [Op.lte]: new Date() },
-        [Op.or]: [{ end_date: null }, { end_date: { [Op.gte]: new Date() } }],
+        end_date: { [Op.gte]: new Date() },
       },
       include: [
-        {
-          model: User,
-          as: 'customers',
-          required: false,
-          where: userId ? { id: userId } : undefined,
-        },
-        {
-          model: Product,
-          as: 'products',
-          where: productId ? { id: productId } : undefined,
-          required: false,
-        },
-        {
-          model: Variant,
-          as: 'variants',
-          where: variantId ? { id: variantId } : undefined,
-          required: false,
-        },
+        { model: Product, as: 'products' },
+        { model: Variant, as: 'variants' },
+        { model: User, as: 'customers' },
       ],
-      transaction,
     });
-
-    for (const rule of qbRules) {
-      const isMatched = variantId
-        ? rule.variants.some(v => v.id === variantId)
-        : rule.products.some(p => p.id === productId);
     
-      if (!isMatched) continue;
+    const applicableQB = qbRules.find((rule) => {
+      const isUserMatched = rule.customers?.some((u) => u.id === effectiveUserId);
+      const isProductMatched = rule.products?.some((p) => p.id === productId);
+      const isVariantMatched = rule.variants?.some((v) => v.id === variantId);
+      return isUserMatched && (isVariantMatched || isProductMatched);
+    });
     
-      const matchedBreaks = rule.qb_rules
-        .filter(r => quantity >= r.quantity)
+    if (applyQuantityBreak && finalPrice === originalPrice && applicableQB) {
+      const sortedTiers = [...applicableQB.qb_rules]
+        .filter((tier) => quantity >= tier.quantity)
         .sort((a, b) => b.quantity - a.quantity);
     
+      if (sortedTiers.length > 0) {
+        const best = sortedTiers[0];
+        let discount = 0;
+    
+        if (best.discount_type === 'percentage') {
+          discount = (best.value / 100) * originalPrice;
+        } else if (best.discount_type === 'fixed price') {
+          discount = best.value;
+        }
+    
+        finalPrice = Math.max(originalPrice - discount, 0);
+        appliedRule = applicableQB;
+      }
+    }
+    
 
-      if (matchedBreaks.length > 0) {
-        const best = matchedBreaks[0];
-        finalPrice =
-          best.discount_type === 'percentage'
-            ? originalPrice * (1 - best.value / 100)
-            : Math.max(originalPrice - best.value, 0);
-        appliedRule = rule;
-        break;
+    const sortedQBs = qbRules
+      .filter(q => quantity >= q.min_quantity)
+      .sort((a, b) => b.min_quantity - a.min_quantity);
+
+    if (sortedQBs.length > 0) {
+      const best = sortedQBs[0];
+      let discount = 0;
+
+      if (best.discount_type === 'percentage') {
+        discount = (best.discount_value / 100) * originalPrice;
+      } else if (best.discount_type === 'fixed price') {
+        discount = best.discount_value;
+      }
+
+      const discounted = Math.max(originalPrice - discount, 0);
+      if (discount > 0) {
+        finalPrice = discounted;
+        appliedRule = best;
       }
     }
   }
 
-  // ===== ƯU TIÊN 3: Custom Pricing (percentage / fixed) =====
-  if (!appliedRule && !variantId) {
-    const cpRules = await CustomPricing.findAll({
-      where: {
-        is_price_list: false,
-        start_date: { [Op.lte]: new Date() },
-        [Op.or]: [{ end_date: null }, { end_date: { [Op.gte]: new Date() } }],
-      },
-      include: [
-        {
-          model: User,
-          as: 'customers',
-          required: false,
-          where: userId ? { id: userId } : undefined,
-        },
-        {
-          model: Product,
-          as: 'products',
-          where: productId ? { id: productId } : undefined,
-          required: false,
-        },
-      ],
-      transaction,
-    });
+  // 5️⃣ Custom Pricing (dạng chiết khấu) nếu chưa có
+  if (!variantId && finalPrice === originalPrice) {
+    const product = await Product.findByPk(productId);
+    if (product?.has_variant) {
+      // ❌ Không áp dụng chiết khấu lên product có variant
+    } else {
+      for (const rule of filteredRules.filter(r => !r.is_price_list)) {
+        const matched = rule.products?.some(p => p.id === productId);
+        if (!matched) continue;
 
-    let maxDiscount = 0;
+        let discount = 0;
+        if (rule.discount_type === 'percentage') {
+          discount = (rule.discount_value / 100) * originalPrice;
+        } else if (rule.discount_type === 'fixed price') {
+          discount = rule.discount_value;
+        }
 
-    for (const rule of cpRules) {
-      const matched = rule.products.some(p => p.id === productId);
-      if (!matched) continue;
-
-      let discount = 0;
-      if (rule.discount_type === 'percentage') {
-        discount = (rule.discount_value / 100) * originalPrice;
-      } else if (rule.discount_type === 'fixed price') {
-        discount = rule.discount_value;
-      }
-
-      if (discount > maxDiscount) {
-        maxDiscount = discount;
-        finalPrice = Math.max(originalPrice - discount, 0);
-        appliedRule = rule;
+        const discounted = Math.max(originalPrice - discount, 0);
+        if (discounted < finalPrice) {
+          finalPrice = discounted;
+          appliedRule = rule;
+        }
       }
     }
   }
@@ -171,7 +161,7 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
   return {
     originalPrice,
     finalPrice,
-    discountAmount: originalPrice - finalPrice,
     appliedRule,
+    discountAmount: originalPrice - finalPrice,
   };
 };

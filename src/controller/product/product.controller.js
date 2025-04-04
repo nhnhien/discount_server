@@ -26,6 +26,7 @@ const formatProduct = (product) => {
     final_price: product.final_price,
     stock_quantity: product.stock_quantity,
     image_url: product.image_url,
+    appliedRule: product.appliedRule, // ✅ THÊM DÒNG NÀY
     variants:
       product.variants?.map((variant) => ({
         id: variant.id,
@@ -39,6 +40,7 @@ const formatProduct = (product) => {
           attribute_name: vv.attribute_value?.attribute?.name,
           value: vv.attribute_value?.value,
         })),
+        appliedRule: variant.appliedRule, // ✅ THÊM DÒNG NÀY (nếu cần cho biến thể)
       })) || [],
   };
 };
@@ -70,7 +72,7 @@ const productIncludeOptions = [
 
 const getProduct = async (req, res) => {
   const { page = 1, limit = 10, search, categoryId } = req.query;
-  const userId = req.user?.id; // 👉 ID thật trong bảng user
+  const userId = req.query.userId ? Number(req.query.userId) : req.user?.id || null;
   console.log('>>> req.user:', req.user); // 👈 kiểm tra req.user có tồn tại không
 
   try {
@@ -94,136 +96,37 @@ const getProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'No products found' });
     }
 
-    let pricingRules = [];
-    if (userId) {
-      console.log('>>> Fetching pricing rules for userId:', userId);
 
-      pricingRules = await CustomPricing.findAll({
-        where: {
-          [Op.or]: [{ is_price_list: false }, { is_price_list: true }],
-        },
-        include: [
-          { model: User, as: 'customers', where: { id: userId }, required: false },
-          {
-            model: Product,
-            as: 'products',
-            required: false,
-            through: { attributes: ['amount'] },
-          },
-          {
-            model: Variant,
-            as: 'variants',
-            required: false,
-            through: { attributes: ['amount'] },
-          },
-        ],
-        raw: false,
-      
-      });
-      console.log('>>> Pricing Rules FOUND:', pricingRules.length); // 👈 kiểm tra số lượng
-      console.log('>>> Pricing Rules FULL:', JSON.stringify(pricingRules, null, 2));
-
-      console.log('User ID:', userId);
-      console.log('Pricing Rules:', pricingRules.map(r => ({
-        id: r.id,
-        is_price_list: r.is_price_list,
-        discount_type: r.discount_type,
-        discount_value: r.discount_value,
-        customers: r.customers?.map(c => c.id),
-        products: r.products?.map(p => p.id),
-        variants: r.variants?.map(v => v.id),
-      })));
-      
-      // Convert amounts
-      pricingRules.forEach((rule) => {
-        rule.amounts = [];
-
-        rule.products?.forEach((product) => {
-          if (product.CustomPricingProduct?.amount) {
-            rule.amounts.push({
-              product_id: product.id,
-              amount: parseFloat(product.CustomPricingProduct.amount),
-            });
-          }
-        });
-
-        rule.variants?.forEach((variant) => {
-          if (variant.CustomPricingVariant?.amount) {
-            rule.amounts.push({
-              variant_id: variant.id,
-              amount: parseFloat(variant.CustomPricingVariant.amount),
-            });
-          }
-        });
-      });
-    }
-
-    const updatedProducts = products.map((product) => {
-      const productJSON = product.toJSON();
-      let computedOriginalPrice = productJSON.original_price;
-      let computedFinalPrice = productJSON.final_price;
-
-      if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
-        const variantOriginals = productJSON.variants.map(v => Number(v.original_price)).filter(n => !isNaN(n));
-        const variantFinals = productJSON.variants.map(v => Number(v.final_price)).filter(n => !isNaN(n));
-
-        if (variantOriginals.length > 0) computedOriginalPrice = Math.min(...variantOriginals);
-        if (variantFinals.length > 0) computedFinalPrice = Math.min(...variantFinals);
-      }
-
-      // ✅ Áp dụng Price List (amounts)
-      pricingRules.forEach((rule) => {
-        rule.amounts?.forEach((price) => {
-          if (!productJSON.has_variant && price.product_id === productJSON.id && !price.variant_id) {
-            computedFinalPrice = price.amount;
-          }
-
-          if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
-            productJSON.variants.forEach((v) => {
-              const matched = rule.amounts.find((p) => p.variant_id === v.id);
-              if (matched) {
-                v.final_price = matched.amount;
-              }
-            });
-
-            const updatedFinals = productJSON.variants.map(v => Number(v.final_price)).filter(n => !isNaN(n));
-            if (updatedFinals.length > 0) {
-              computedFinalPrice = Math.min(...updatedFinals);
-            }
-          }
-        });
-      });
-
-      // ✅ Áp dụng Custom Pricing (discount)
-      pricingRules.forEach((rule) => {
-        if (!productJSON.has_variant && !rule.is_price_list && rule.products?.some(p => p.id === productJSON.id)) {
-          let discount = 0;
-
-          if (rule.discount_type === 'percentage') {
-            discount = (rule.discount_value / 100) * computedOriginalPrice;
-          } else if (rule.discount_type === 'fixed price') {
-            discount = rule.discount_value;
-          }
-
-          const discountedPrice = Math.max(computedOriginalPrice - discount, 0);
-          if (discountedPrice < computedFinalPrice) {
-            computedFinalPrice = discountedPrice;
+    const updatedProducts = await Promise.all(
+      products.map(async (product) => {
+        const productJSON = product.toJSON();
+    
+        // ✅ gọi calculatePrice cho sản phẩm chính
+        const mainResult = await calculatePrice(userId, product.id, null, 1, { applyQuantityBreak: false });
+        productJSON.original_price = mainResult.originalPrice;
+        productJSON.final_price = mainResult.finalPrice;
+        productJSON.appliedRule = mainResult.appliedRule;
+    
+        // ✅ gọi cho từng variant nếu có
+        if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
+          for (const variant of productJSON.variants) {
+            const variantResult = await calculatePrice(userId, product.id, variant.id, 1, { applyQuantityBreak: false });
+            variant.original_price = variantResult.originalPrice;
+            variant.final_price = variantResult.finalPrice;
+            variant.appliedRule = variantResult.appliedRule;
           }
         }
-      });
-
-      const formattedProduct = formatProduct({
-        ...productJSON,
-        original_price: computedOriginalPrice,
-        final_price: computedFinalPrice,
-      });
-
-      return {
-        ...formattedProduct,
-        discountPercentage: 0,
-        appliedRule: null,
-      };
-    });
+    
+        const formattedProduct = formatProduct(productJSON);
+    
+        return {
+          ...formattedProduct,
+          discountPercentage: 0,
+          appliedRule: productJSON.appliedRule,
+        };
+      })
+    );
+    
 
     return res.status(200).json({
       success: true,
@@ -246,7 +149,7 @@ const getProduct = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.query;
+    const userId = req.query.userId ? Number(req.query.userId) : req.user?.id || null;
 
     const product = await Product.findOne({
       where: { id },
@@ -269,106 +172,14 @@ const getProductById = async (req, res) => {
       if (variantFinals.length > 0) computedFinalPrice = Math.min(...variantFinals);
     }
 
-    if (userId) {
-      const pricingRules = await CustomPricing.findAll({
-        where: {
-          [Op.or]: [{ is_price_list: false }, { is_price_list: true }],
-        },
-        include: [
-          {
-            model: User,
-            as: 'customers',
-            where: userId ? { id: userId } : undefined,
-            required: !!userId,
-          },
-          {
-            model: Product,
-            as: 'products',
-            required: false,
-            through: { attributes: ['amount'] },
-          },
-          {
-            model: Variant,
-            as: 'variants',
-            required: false,
-            through: { attributes: ['amount'] },
-          },
-        ],
-        raw: false,
-      });
-
-      pricingRules.forEach((rule) => {
-        rule.amounts = [];
-
-        rule.products?.forEach((product) => {
-          if (product.CustomPricingProduct?.amount) {
-            rule.amounts.push({
-              product_id: product.id,
-              amount: parseFloat(product.CustomPricingProduct.amount),
-            });
-          }
-        });
-
-        rule.variants?.forEach((variant) => {
-          if (variant.CustomPricingVariant?.amount) {
-            rule.amounts.push({
-              variant_id: variant.id,
-              amount: parseFloat(variant.CustomPricingVariant.amount),
-            });
-          }
-        });
-      });
-
-      // ✅ Áp dụng Price List (amounts)
-      pricingRules.forEach((rule) => {
-        rule.amounts?.forEach((price) => {
-          if (!productJSON.has_variant && price.product_id === productJSON.id && !price.variant_id) {
-            computedFinalPrice = price.amount;
-          }
-
-          if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
-            productJSON.variants.forEach((v) => {
-              const matched = rule.amounts.find((p) => p.variant_id === v.id);
-              if (matched) {
-                v.final_price = matched.amount;
-              }
-            });
-
-            const updatedFinals = productJSON.variants.map(v => Number(v.final_price)).filter(n => !isNaN(n));
-            if (updatedFinals.length > 0) {
-              computedFinalPrice = Math.min(...updatedFinals);
-            }
-          }
-        });
-      });
-
-      // ✅ Áp dụng Custom Pricing
-      pricingRules.forEach((rule) => {
-        if (!rule.is_price_list && !productJSON.has_variant && rule.products?.some(p => p.id === productJSON.id)) {
-          let discount = 0;
-      
-          if (rule.discount_type === 'percentage') {
-            discount = (rule.discount_value / 100) * computedOriginalPrice;
-          } else if (rule.discount_type === 'fixed price') {
-            discount = rule.discount_value;
-          }
-      
-          const discountedPrice = Math.max(computedOriginalPrice - discount, 0);
-          if (discountedPrice < computedFinalPrice) {
-            computedFinalPrice = discountedPrice;
-          }
-        }
-      });
-    }
-
-    const mainResult = await calculatePrice(userId, product.id, null, 1);
+    const mainResult = await calculatePrice(userId, product.id, null, 1, { applyQuantityBreak: false });
     productJSON.original_price = mainResult.originalPrice;
     productJSON.final_price = mainResult.finalPrice;
     productJSON.appliedRule = mainResult.appliedRule;
     
     if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
       for (const variant of productJSON.variants) {
-        const variantResult = await calculatePrice(userId, product.id, variant.id, 1);
+        const variantResult = await calculatePrice(userId, product.id, variant.id, 1, { applyQuantityBreak: false });
         variant.original_price = variantResult.originalPrice;
         variant.final_price = variantResult.finalPrice;
         variant.appliedRule = variantResult.appliedRule;
@@ -693,5 +504,6 @@ const deleteProduct = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
   }
 };
+
 
 export { getProduct, getProductById, createProduct, updateProduct, deleteProduct };
