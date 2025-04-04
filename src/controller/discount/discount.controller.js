@@ -1,4 +1,6 @@
 import { Discount, Product, Variant, User, sequelize } from '../../models/index.js';
+import { Op } from 'sequelize';
+
 export const getAllDiscounts = async (req, res) => {
   try {
     const discounts = await Discount.findAll({
@@ -53,9 +55,9 @@ export const getDiscountById = async (req, res) => {
   }
 };
 
-// Tạo mã giảm giá mới
 export const createDiscount = async (req, res) => {
   const transaction = await sequelize.transaction();
+
   try {
     const {
       discount_code,
@@ -80,7 +82,6 @@ export const createDiscount = async (req, res) => {
         message: 'Vui lòng cung cấp đầy đủ thông tin cần thiết',
       });
     }
-
     const discount = await Discount.create(
       {
         discount_code,
@@ -104,7 +105,6 @@ export const createDiscount = async (req, res) => {
     if (variant_ids && variant_ids.length > 0) {
       await discount.setVariants(variant_ids, { transaction });
     }
-
     if (user_ids && user_ids.length > 0) {
       await discount.setCustomers(user_ids, { transaction });
     }
@@ -161,7 +161,6 @@ export const updateDiscount = async (req, res) => {
         message: 'Không tìm thấy mã giảm giá',
       });
     }
-
     await discount.update(
       {
         discount_code,
@@ -224,7 +223,6 @@ export const deleteDiscount = async (req, res) => {
         message: 'Không tìm thấy mã giảm giá',
       });
     }
-
     await discount.destroy();
 
     res.status(200).json({
@@ -240,7 +238,7 @@ export const deleteDiscount = async (req, res) => {
   }
 };
 
-export const applyDiscount = async (req, res) => {
+export const validateDiscountCode = async (req, res) => {
   try {
     const { discount_code, product_id, variant_id, user_id, order_amount } = req.body;
 
@@ -271,33 +269,40 @@ export const applyDiscount = async (req, res) => {
         message: 'Mã giảm giá không tồn tại hoặc đã hết hạn',
       });
     }
+
     if (discount.usage_limit && discount.usage_count >= discount.usage_limit) {
       return res.status(400).json({
         success: false,
         message: 'Mã giảm giá đã hết lượt sử dụng',
       });
     }
-    if (discount.min_order_amount && order_amount < discount.min_order_amount) {
+
+    const numericOrderAmount = parseFloat(order_amount);
+    if (discount.min_order_amount && numericOrderAmount < discount.min_order_amount) {
       return res.status(400).json({
         success: false,
         message: `Giá trị đơn hàng tối thiểu để sử dụng mã giảm giá là ${discount.min_order_amount}`,
       });
     }
+
     let isApplicable = true;
-    if (discount.products && discount.products.length > 0) {
-      if (!product_id || !discount.products.some((p) => p.id === parseInt(product_id))) {
-        isApplicable = false;
-      }
+
+    const productMatched = discount.products?.some((p) => Number(p.id) === Number(product_id));
+    const variantMatched = variant_id && discount.variants?.some((v) => Number(v.id) === Number(variant_id));
+
+    if (
+      (discount.products.length > 0 || discount.variants.length > 0) &&
+      !productMatched &&
+      !variantMatched
+    ) {
+      isApplicable = false;
     }
-    if (isApplicable && discount.variants && discount.variants.length > 0) {
-      if (!variant_id || !discount.variants.some((v) => v.id === parseInt(variant_id))) {
-        isApplicable = false;
-      }
-    }
-    if (isApplicable && discount.customers && discount.customers.length > 0) {
-      if (!user_id || !discount.customers.some((u) => u.id === parseInt(user_id))) {
-        isApplicable = false;
-      }
+
+    if (
+      discount.customers.length > 0 &&
+      !discount.customers.some((u) => Number(u.id) === Number(user_id))
+    ) {
+      isApplicable = false;
     }
 
     if (!isApplicable) {
@@ -306,11 +311,12 @@ export const applyDiscount = async (req, res) => {
         message: 'Mã giảm giá không áp dụng cho sản phẩm, biến thể hoặc tài khoản này',
       });
     }
+
     let discountAmount = 0;
 
     switch (discount.discount_type) {
       case 'percentage':
-        discountAmount = (order_amount * discount.value) / 100;
+        discountAmount = (numericOrderAmount * discount.value) / 100;
         break;
       case 'fixed':
         discountAmount = discount.value;
@@ -319,6 +325,7 @@ export const applyDiscount = async (req, res) => {
         discountAmount = 'free_shipping';
         break;
     }
+
     if (
       typeof discountAmount === 'number' &&
       discount.max_discount_amount &&
@@ -326,6 +333,7 @@ export const applyDiscount = async (req, res) => {
     ) {
       discountAmount = discount.max_discount_amount;
     }
+
     await discount.update({
       usage_count: discount.usage_count + 1,
     });
@@ -337,7 +345,10 @@ export const applyDiscount = async (req, res) => {
         discount_code: discount.discount_code,
         discount_type: discount.discount_type,
         discount_amount: discountAmount,
-        final_amount: discountAmount === 'free_shipping' ? order_amount : order_amount - discountAmount,
+        final_amount:
+          discountAmount === 'free_shipping'
+            ? numericOrderAmount
+            : numericOrderAmount - discountAmount,
       },
     });
   } catch (error) {
@@ -347,4 +358,30 @@ export const applyDiscount = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+// GET /api/discounts/available?user_id=2
+export const getAvailableDiscounts = async (req, res) => {
+  const userId = Number(req.query.user_id);
+
+  const discounts = await Discount.findAll({
+    where: {
+      is_active: true,
+      start_date: { [Op.lte]: new Date() },
+      end_date: { [Op.or]: [{ [Op.gte]: new Date() }, { [Op.is]: null }] },
+    },
+    include: [
+      { model: User, as: 'customers', required: false },
+    ],
+  });
+
+  const filtered = discounts.filter((discount) => {
+    if (!discount.customers?.length) return true; // công khai
+    return discount.customers.some((u) => u.id === userId);
+  });
+
+  res.status(200).json({
+    success: true,
+    data: filtered.map((d) => d.discount_code),
+  });
 };

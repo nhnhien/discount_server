@@ -14,93 +14,6 @@ import { Op } from 'sequelize';
 import { calculatePrice } from '../../util/calculatePrice.js';
 
 
-// export const getCart = async (req, res) => {
-//   try {
-//     const userId = req.user?.id;
-//     if (!userId) {
-//       return res.status(401).json({ success: false, message: 'Không tìm thấy thông tin người dùng' });
-//     }
-
-//     const [cart, created] = await Cart.findOrCreate({
-//       where: { user_id: userId, status: 'active' },
-//       defaults: {
-//         user_id: userId,
-//         status: 'active',
-//         subtotal: 0,
-//         total_amount: 0,
-//       },
-//     });
-
-//     let shippingAddress = null;
-//     if (cart.shipping_address_id) {
-//       shippingAddress = await Address.findByPk(cart.shipping_address_id);
-//     }
-
-//     const cartItems = await CartItem.findAll({
-//       where: { cart_id: cart.id },
-//       include: [
-//         {
-//           model: Product,
-//           as: 'product',
-//           attributes: ['id', 'name', 'image_url', 'final_price', 'original_price', 'has_variant', 'stock_quantity'],
-//         },
-//         {
-//           model: Variant,
-//           as: 'variant',
-//           attributes: ['id', 'sku', 'final_price', 'original_price', 'stock_quantity', 'image_url'],
-//         },
-//       ],
-//     });
-
-//     const formattedItems = cartItems.map((item) => {
-//       const productData = item.product;
-//       const variantData = item.variant;
-
-//       // 👉 Lấy original_price chuẩn để hiển thị giá gốc
-//       const originalPrice = variantData?.original_price || productData?.original_price || item.unit_price;
-
-//       return {
-//         id: item.id,
-//         product_id: item.product_id,
-//         variant_id: item.variant_id,
-//         name: productData?.name || '',
-//         image: variantData?.image_url || productData?.image_url,
-//         sku: variantData?.sku || null,
-//         quantity: item.quantity,
-//         stock_quantity: variantData?.stock_quantity || productData?.stock_quantity || 0,
-//         unit_price: item.unit_price,
-//         total_price: item.total_price,
-//         discount_code: item.discount_code,
-//         discount_amount: item.discount_amount || 0,
-//         original_price: originalPrice, // ✅ Bổ sung dòng này
-//       };
-//     });
-
-//     res.status(200).json({
-//       success: true,
-//       data: {
-//         id: cart.id,
-//         items: formattedItems,
-//         item_count: cartItems.length,
-//         subtotal: cart.subtotal,
-//         shipping_fee: cart.shipping_fee || 0,
-//         discount_amount: cart.applied_discount_amount || 0,
-//         total_amount: cart.total_amount,
-//         shipping_address: shippingAddress,
-//         note: cart.note,
-//         created_at: cart.createdAt,
-//       },
-//     });
-//   } catch (error) {
-//     console.error('Error getting cart:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Không thể lấy thông tin giỏ hàng',
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const getCart = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -108,15 +21,25 @@ export const getCart = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Không tìm thấy thông tin người dùng' });
     }
 
-    const [cart, created] = await Cart.findOrCreate({
+    const [cart] = await Cart.findOrCreate({
       where: { user_id: userId, status: 'active' },
       defaults: {
         user_id: userId,
         status: 'active',
         subtotal: 0,
         total_amount: 0,
+        discount_code: null,
+        applied_discount_amount: 0
       },
     });
+
+    // ✅ Đọc danh sách item được chọn checkbox (chuỗi id cách nhau bởi dấu phẩy)
+    const selectedItemIds = req.query.selected_item_ids
+      ? req.query.selected_item_ids.split(',').map((id) => parseInt(id))
+      : null;
+
+    // Chỉ áp dụng discount nếu được yêu cầu rõ ràng VÀ có discount_code
+    const shouldApplyDiscount = req.query.apply_discount === 'true' && cart.discount_code;
 
     let shippingAddress = null;
     if (cart.shipping_address_id) {
@@ -139,16 +62,21 @@ export const getCart = async (req, res) => {
       ],
     });
 
-    // 🔁 Tính lại giá từng item
+    // Tính toán lại giá của mỗi item để đảm bảo chính xác
     const formattedItems = await Promise.all(
       cartItems.map(async (item) => {
         const productData = item.product;
         const variantData = item.variant;
         const quantity = item.quantity;
 
-        const priceData = await calculatePrice(userId, item.product_id, item.variant_id, quantity);
+        // Không áp dụng mã giảm giá ở cấp độ sản phẩm
+        const priceData = await calculatePrice(userId, item.product_id, item.variant_id, quantity, {
+          // KHÔNG truyền appliedDiscountCode ở đây
+        });
 
-        const originalPrice = variantData?.original_price || productData?.original_price || priceData.originalPrice;
+        const originalUnitPrice = Number(variantData?.original_price || productData?.original_price || 0);
+        const unitPrice = priceData.finalPrice;
+        const totalPrice = unitPrice * quantity;
 
         return {
           id: item.id,
@@ -159,23 +87,101 @@ export const getCart = async (req, res) => {
           sku: variantData?.sku || null,
           quantity,
           stock_quantity: variantData?.stock_quantity || productData?.stock_quantity || 0,
-          unit_price: priceData.finalPrice,
-          total_price: priceData.finalPrice * quantity,
-          discount_code: priceData.appliedRule ? `RULE-${priceData.appliedRule.id}` : null,
+          unit_price: unitPrice,
+          total_price: totalPrice,
           discount_amount: priceData.discountAmount * quantity,
-          original_price: originalPrice,
+          original_price: originalUnitPrice,
         };
       })
     );
 
-    // ✅ Cập nhật lại tổng giá trị giỏ hàng
-    const subtotal = formattedItems.reduce((sum, item) => sum + item.total_price, 0);
-    const totalDiscount = formattedItems.reduce((sum, item) => sum + item.discount_amount, 0);
+    // Tính tổng cho các item được chọn
+    const selectedItems = selectedItemIds 
+      ? formattedItems.filter(item => selectedItemIds.includes(item.id)) 
+      : formattedItems;
+    
+    // Tính lại subtotal rõ ràng từ các item
+    const subtotal = selectedItems.reduce((sum, item) => sum + item.total_price, 0);
+    
+    let totalDiscount = 0;
+    
+    // Chỉ tính discount nếu cần áp dụng
+    if (shouldApplyDiscount) {
+      // Lấy thông tin chi tiết về mã giảm giá
+      const discount = await Discount.findOne({
+        where: {
+          discount_code: cart.discount_code,
+          is_active: true,
+          start_date: { [Op.lte]: new Date() },
+          end_date: { [Op.or]: [{ [Op.gte]: new Date() }, { [Op.is]: null }] },
+        },
+        include: [
+          { model: Product, as: 'products', required: false },
+          { model: Variant, as: 'variants', required: false },
+          { model: User, as: 'customers', required: false },
+        ],
+      });
+      
+      if (discount) {
+        // Kiểm tra min_order_amount
+        const minOrderAmount = Number(discount.min_order_amount);
+        if (!isNaN(minOrderAmount) && minOrderAmount > 0 && subtotal < minOrderAmount) {
+          // Không áp dụng discount nếu không đạt min_order_amount
+          console.log(`Skipping discount: subtotal ${subtotal} less than min_order_amount ${minOrderAmount}`);
+        } else {
+          // Kiểm tra các điều kiện khác
+          let canApplyDiscount = true;
+          
+          if (discount.products && discount.products.length > 0) {
+            const productIdsInSelection = selectedItems.map(item => item.product_id);
+            const hasMatchingProduct = discount.products.some(p => productIdsInSelection.includes(p.id));
+            if (!hasMatchingProduct) canApplyDiscount = false;
+          }
+          
+          if (discount.variants && discount.variants.length > 0) {
+            const variantIdsInSelection = selectedItems
+              .filter(item => item.variant_id)
+              .map(item => item.variant_id);
+            const hasMatchingVariant = discount.variants.some(v => variantIdsInSelection.includes(v.id));
+            if (!hasMatchingVariant) canApplyDiscount = false;
+          }
+          
+          if (discount.customers && discount.customers.length > 0) {
+            const isCustomerAllowed = discount.customers.some(c => c.id === userId);
+            if (!isCustomerAllowed) canApplyDiscount = false;
+          }
+          
+          if (canApplyDiscount) {
+            // Tính giảm giá dựa trên loại
+            if (discount.discount_type === 'percentage') {
+              totalDiscount = (subtotal * Number(discount.value)) / 100;
+            } else if (discount.discount_type === 'fixed') {
+              totalDiscount = Number(discount.value);
+            } else if (discount.discount_type === 'free_shipping') {
+              totalDiscount = Number(cart.shipping_fee || 0);
+            }
+            
+            // Áp dụng giới hạn giảm giá tối đa nếu có
+            const maxDiscountAmount = Number(discount.max_discount_amount);
+            if (!isNaN(maxDiscountAmount) && maxDiscountAmount > 0 && totalDiscount > maxDiscountAmount) {
+              totalDiscount = maxDiscountAmount;
+            }
+          }
+        }
+      }
+    } else {
+      // Nếu không áp dụng discount cấp giỏ hàng, tính tổng các discount của từng sản phẩm
+      totalDiscount = selectedItems.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+    }
 
-    cart.subtotal = subtotal;
-    cart.applied_discount_amount = totalDiscount;
-    cart.total_amount = subtotal;
-    await cart.save();
+    const totalAmount = Math.max(subtotal - totalDiscount, 0);
+
+    // Cập nhật lại subtotal và total_amount trong cart để đảm bảo nhất quán
+    await cart.update({
+      subtotal,
+      applied_discount_amount: totalDiscount,
+      total_amount: totalAmount
+    });
 
     res.status(200).json({
       success: true,
@@ -185,8 +191,9 @@ export const getCart = async (req, res) => {
         item_count: formattedItems.length,
         subtotal: subtotal,
         shipping_fee: cart.shipping_fee || 0,
+        discount_code: shouldApplyDiscount ? cart.discount_code : null,
         discount_amount: totalDiscount,
-        total_amount: subtotal,
+        total_amount: totalAmount,
         shipping_address: shippingAddress,
         note: cart.note,
         created_at: cart.createdAt,
@@ -201,6 +208,7 @@ export const getCart = async (req, res) => {
     });
   }
 };
+
 
 export const addToCart = async (req, res) => {
   const transaction = await sequelize.transaction();
@@ -225,6 +233,7 @@ export const addToCart = async (req, res) => {
         message: 'Sản phẩm không tồn tại',
       });
     }
+
 
     if (quantity <= 0) {
       await transaction.rollback();
@@ -271,8 +280,6 @@ export const addToCart = async (req, res) => {
         message: 'Số lượng sản phẩm trong kho không đủ',
       });
     }
-    const priceData = await calculatePrice(userId, product_id, variant_id, quantity, transaction);
-    console.log('🧾 priceData:', priceData);
 
     const [cart, created] = await Cart.findOrCreate({
       where: { user_id: userId, status: 'active' },
@@ -281,8 +288,25 @@ export const addToCart = async (req, res) => {
         status: 'active',
         subtotal: 0,
         total_amount: 0,
+        discount_code: null,
+        applied_discount_amount: 0
       },
       transaction,
+    });
+        // Tránh tự động áp dụng mã giảm giá không phù hợp
+        if (cart.discount_code) {
+          await cart.update(
+            {
+              discount_code: null,
+              applied_discount_amount: 0
+            },
+            { transaction }
+          );
+        }
+
+    // ✅ KHÔNG áp dụng discount_code từ cart ở đây
+    const priceData = await calculatePrice(userId, product_id, variant_id, quantity, {
+      // appliedDiscountCode: cart.discount_code,  ← xoá dòng này để tránh tự động áp
     });
 
     let cartItem = await CartItem.findOne({
@@ -350,6 +374,7 @@ export const addToCart = async (req, res) => {
 
     await transaction.commit();
 
+ 
     res.status(200).json({
       success: true,
       message: 'Đã thêm sản phẩm vào giỏ hàng',
@@ -390,6 +415,7 @@ export const addToCart = async (req, res) => {
     });
   }
 };
+
 
 export const updateCartItem = async (req, res) => {
   const transaction = await sequelize.transaction();
@@ -456,33 +482,41 @@ export const updateCartItem = async (req, res) => {
         });
       }
 
-      const priceData = await calculatePrice(userId, cartItem.product_id, cartItem.variant_id, quantity, transaction);
+      // Lấy đơn giá mỗi sản phẩm
+      const priceData = await calculatePrice(userId, cartItem.product_id, cartItem.variant_id, 1); // ⚠️ số lượng = 1
 
       await cartItem.update(
         {
           quantity,
-          unit_price: priceData.finalPrice,
-          total_price: priceData.finalPrice * quantity,
+          unit_price: priceData.finalPrice, // Đơn giá mỗi sản phẩm
+          total_price: priceData.finalPrice * quantity, // Tổng giá = đơn giá * số lượng
           discount_code: priceData.appliedRule ? `RULE-${priceData.appliedRule.id}` : null,
-          discount_amount: priceData.discountAmount * quantity,
+          discount_amount: priceData.discountAmount * quantity, // Tổng giảm giá
         },
         { transaction }
       );
     }
 
+    // Lấy lại tất cả các cart items để tính toán lại subtotal
     const cartItems = await CartItem.findAll({
       where: { cart_id: cart.id },
       transaction,
     });
 
-    const subtotal = cartItems.reduce((sum, item) => sum + parseFloat(item.total_price), 0);
-    const totalDiscount = cartItems.reduce((sum, item) => sum + parseFloat(item.discount_amount || 0), 0);
+    // Tính subtotal một cách rõ ràng
+    const subtotal = cartItems.reduce((sum, item) => {
+      const itemPrice = Number(item.unit_price) * Number(item.quantity);
+      return sum + itemPrice;
+    }, 0);
+    
+    const totalDiscount = cartItems.reduce((sum, item) => sum + Number(item.discount_amount || 0), 0);
 
+    // Loại bỏ discount code nếu cập nhật quantity
     await cart.update(
       {
         subtotal,
         applied_discount_amount: totalDiscount,
-        total_amount: subtotal,
+        total_amount: subtotal - (cart.discount_code ? cart.applied_discount_amount : 0),
       },
       { transaction }
     );
@@ -495,8 +529,8 @@ export const updateCartItem = async (req, res) => {
       data: {
         cart_id: cart.id,
         subtotal,
-        discount_amount: totalDiscount,
-        total_amount: subtotal,
+        discount_amount: cart.applied_discount_amount || 0,
+        total_amount: subtotal - (cart.applied_discount_amount || 0),
       },
     });
   } catch (error) {
@@ -509,7 +543,6 @@ export const updateCartItem = async (req, res) => {
     });
   }
 };
-
 export const removeFromCart = async (req, res) => {
   const transaction = await sequelize.transaction();
 
@@ -563,6 +596,7 @@ export const removeFromCart = async (req, res) => {
     );
 
     await transaction.commit();
+    return await getCart(req, res);
 
     res.status(200).json({
       success: true,
@@ -706,19 +740,19 @@ export const updateShippingInfo = async (req, res) => {
   }
 };
 
+
 export const applyDiscount = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
     const userId = req.user.id;
-    const { discount_code } = req.body;
+    const { discount_code, selected_item_ids = [] } = req.body;
+
+    console.log("Request data:", { discount_code, selected_item_ids });
 
     if (!discount_code) {
       await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Vui lòng nhập mã giảm giá',
-      });
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập mã giảm giá' });
     }
 
     const cart = await Cart.findOne({
@@ -728,68 +762,231 @@ export const applyDiscount = async (req, res) => {
 
     if (!cart) {
       await transaction.rollback();
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy giỏ hàng',
-      });
+      return res.status(404).json({ success: false, message: 'Không tìm thấy giỏ hàng' });
     }
 
     const discount = await Discount.findOne({
       where: {
-        discount_code: discount_code,
-        start_date: { [Op.lte]: new Date() },
-        end_date: { [Op.or]: [{ [Op.gte]: new Date() }, { [Op.is]: null }] },
+        discount_code: String(discount_code).trim(),
+        start_date: { [Op.lte]: sequelize.literal('NOW()') },
+        end_date: {
+          [Op.or]: [
+            { [Op.gte]: sequelize.literal('NOW()') },
+            { [Op.is]: null }
+          ]
+        },
         is_active: true,
       },
+      include: [
+        { model: Product, as: 'products', required: false },
+        { model: Variant, as: 'variants', required: false },
+        { model: User, as: 'customers', required: false },
+      ],
       transaction,
     });
 
     if (!discount) {
       await transaction.rollback();
-      return res.status(404).json({
-        success: false,
-        message: 'Mã giảm giá không hợp lệ hoặc đã hết hạn',
-      });
+      return res.status(404).json({ success: false, message: 'Mã giảm giá không hợp lệ hoặc đã hết hạn' });
     }
 
-    if (discount.min_order_value && cart.subtotal < discount.min_order_value) {
+    console.log(`Discount info:`, {
+      code: discount.discount_code,
+      type: discount.discount_type,
+      value: discount.value,
+      minOrderAmount: discount.min_order_amount,
+      maxDiscountAmount: discount.max_discount_amount
+    });
+
+    // Lấy các cart items đã được chọn
+    const cartItems = await CartItem.findAll({
+      where: { 
+        cart_id: cart.id,
+        id: { [Op.in]: selected_item_ids.length > 0 ? selected_item_ids : [0] }
+      },
+      include: [
+        { model: Product, as: 'product' },
+        { model: Variant, as: 'variant' },
+      ],
+      transaction,
+    });
+
+    if (cartItems.length === 0) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: `Giá trị đơn hàng tối thiểu phải là ${discount.min_order_value.toLocaleString('vi-VN')} VND`,
+        message: 'Vui lòng chọn ít nhất một sản phẩm để áp dụng mã giảm giá',
       });
     }
 
-    let discountAmount = 0;
-    if (discount.discount_type === 'percentage') {
-      discountAmount = (discount.value / 100) * cart.subtotal;
-      if (discount.max_discount_amount && discountAmount > discount.max_discount_amount) {
-        discountAmount = discount.max_discount_amount;
-      }
-    } else if (discount.discount_type === 'fixed') {
-      discountAmount = discount.value;
+    // Tính tổng giá trị đơn hàng một cách rõ ràng
+    const itemDetails = cartItems.map(item => {
+      const quantity = Number(item.quantity);
+      const unitPrice = Number(item.unit_price);
+      const totalPrice = unitPrice * quantity;
+      
+      return {
+        id: item.id,
+        name: item.product?.name || 'Unknown',
+        quantity,
+        unitPrice,
+        totalPrice
+      };
+    });
+
+    console.log("Item Details:", JSON.stringify(itemDetails));
+
+    // Tính tổng một cách rõ ràng
+    const subtotal = itemDetails.reduce((sum, item) => sum + item.totalPrice, 0);
+    console.log("Calculated Subtotal:", subtotal);
+
+    // Kiểm tra điều kiện min_order_amount
+    console.log(`Raw min_order_amount from DB: ${JSON.stringify(discount.min_order_amount)}`);
+    console.log(`Type of min_order_amount: ${typeof discount.min_order_amount}`);
+    
+    const minOrderAmount = Number(discount.min_order_amount);
+    console.log(`Converted min_order_amount: ${minOrderAmount}, isNaN: ${isNaN(minOrderAmount)}`);
+    
+    if (!isNaN(minOrderAmount) && minOrderAmount > 0 && subtotal < minOrderAmount) {
+      console.log("Discount rejected: Order total is less than minimum requirement");
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: `Giá trị đơn hàng tối thiểu phải là ${minOrderAmount.toLocaleString('vi-VN')}đ (hiện tại: ${subtotal.toLocaleString('vi-VN')}đ)`,
+      });
     }
 
+    // Kiểm tra các điều kiện áp dụng discount
+    let canApplyDiscount = true;
+    
+    if (discount.products && discount.products.length > 0) {
+      const productIdsInCart = cartItems.map(item => item.product_id);
+      const hasMatchingProduct = discount.products.some(p => productIdsInCart.includes(p.id));
+      if (!hasMatchingProduct) {
+        canApplyDiscount = false;
+        console.log("Discount rejected: No matching products");
+      }
+    }
+    
+    if (discount.variants && discount.variants.length > 0) {
+      const variantIdsInCart = cartItems
+        .filter(item => item.variant_id)
+        .map(item => item.variant_id);
+      const hasMatchingVariant = discount.variants.some(v => variantIdsInCart.includes(v.id));
+      if (!hasMatchingVariant) {
+        canApplyDiscount = false;
+        console.log("Discount rejected: No matching variants");
+      }
+    }
+    
+    if (discount.customers && discount.customers.length > 0) {
+      const isCustomerAllowed = discount.customers.some(c => c.id === userId);
+      if (!isCustomerAllowed) {
+        canApplyDiscount = false;
+        console.log("Discount rejected: Customer not allowed");
+      }
+    }
+
+    if (!canApplyDiscount) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Mã giảm giá không áp dụng cho sản phẩm nào trong giỏ hàng',
+      });
+    }
+
+    // Tính giảm giá cho toàn bộ đơn hàng
+    let discountAmount = 0;
+    
+    if (discount.discount_type === 'percentage') {
+      discountAmount = (subtotal * Number(discount.value)) / 100;
+      console.log(`Percentage discount: ${Number(discount.value)}% of ${subtotal} = ${discountAmount}`);
+    } else if (discount.discount_type === 'fixed') {
+      discountAmount = Number(discount.value);
+      console.log(`Fixed discount: ${discountAmount}`);
+    } else if (discount.discount_type === 'free_shipping') {
+      discountAmount = Number(cart.shipping_fee || 0);
+      console.log(`Free shipping discount: ${discountAmount}`);
+    }
+    
+    // Áp dụng max_discount_amount nếu có
+    const maxDiscountAmount = Number(discount.max_discount_amount);
+    if (!isNaN(maxDiscountAmount) && maxDiscountAmount > 0 && discountAmount > maxDiscountAmount) {
+      console.log(`Capping discount at max: ${discountAmount} -> ${maxDiscountAmount}`);
+      discountAmount = maxDiscountAmount;
+    }
+
+    // Tính total_amount sau khi áp dụng giảm giá
+    const totalAmount = Math.max(subtotal - discountAmount, 0);
+    console.log(`Final calculations: subtotal=${subtotal}, discountAmount=${discountAmount}, totalAmount=${totalAmount}`);
+
+    // Lưu mã giảm giá vào cart
     await cart.update(
       {
-        discount_code: discount_code,
+        discount_code,
         applied_discount_amount: discountAmount,
-        total_amount: cart.subtotal - discountAmount,
+        subtotal: subtotal, // ⚠️ Cập nhật lại subtotal trong cart
+        total_amount: totalAmount,
       },
       { transaction }
     );
 
     await transaction.commit();
 
+    // Lấy thông tin cart mới nhất
+    const updatedCart = await Cart.findOne({
+      where: { id: cart.id },
+      include: [
+        {
+          model: CartItem,
+          as: 'items',
+          include: [
+            { model: Product, as: 'product' },
+            { model: Variant, as: 'variant' },
+          ],
+        },
+        {
+          model: Address,
+          as: 'shipping_address',
+        },
+      ],
+    });
+
+    const formattedItems = updatedCart.items.map(item => {
+      const productData = item.product;
+      const variantData = item.variant;
+      
+      return {
+        id: item.id,
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        name: productData?.name || '',
+        image: variantData?.image_url || productData?.image_url,
+        sku: variantData?.sku || null,
+        quantity: item.quantity,
+        stock_quantity: variantData?.stock_quantity || productData?.stock_quantity || 0,
+        unit_price: parseFloat(item.unit_price),
+        total_price: parseFloat(item.total_price),
+        discount_amount: parseFloat(item.discount_amount || 0),
+        original_price: parseFloat(variantData?.original_price || productData?.original_price || 0),
+      };
+    });
+
     res.status(200).json({
       success: true,
       message: 'Đã áp dụng mã giảm giá',
       data: {
-        cart_id: cart.id,
-        discount_code: discount_code,
+        id: updatedCart.id,
+        items: formattedItems,
+        item_count: formattedItems.length,
+        subtotal: subtotal, // ⚠️ Sử dụng subtotal đã được tính lại
+        shipping_fee: parseFloat(updatedCart.shipping_fee || 0),
+        discount_code: updatedCart.discount_code,
         discount_amount: discountAmount,
-        subtotal: cart.subtotal,
-        total_amount: cart.subtotal - discountAmount,
+        total_amount: totalAmount,
+        shipping_address: updatedCart.shipping_address,
+        note: updatedCart.note,
+        created_at: updatedCart.createdAt,
       },
     });
   } catch (error) {
@@ -802,6 +999,7 @@ export const applyDiscount = async (req, res) => {
     });
   }
 };
+
 
 export const removeDiscount = async (req, res) => {
   const transaction = await sequelize.transaction();
@@ -825,22 +1023,17 @@ export const removeDiscount = async (req, res) => {
       {
         discount_code: null,
         applied_discount_amount: 0,
-        total_amount: cart.subtotal,
       },
       { transaction }
     );
 
     await transaction.commit();
 
-    res.status(200).json({
-      success: true,
-      message: 'Đã hủy mã giảm giá',
-      data: {
-        cart_id: cart.id,
-        subtotal: cart.subtotal,
-        total_amount: cart.subtotal,
-      },
-    });
+    // Make sure getCart doesn't try to apply a discount
+    req.query.apply_discount = 'false';
+    
+    // Gọi lại getCart để lấy dữ liệu mới nhất
+    return await getCart(req, res);
   } catch (error) {
     await transaction.rollback();
     console.error('Error removing discount:', error);

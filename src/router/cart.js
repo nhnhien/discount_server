@@ -15,11 +15,11 @@ const router = express.Router();
 
 router.get('/', verifyFirebaseToken, getCart);
 router.post('/', verifyFirebaseToken, addToCart);
-router.put('/shipping', verifyFirebaseToken, updateShippingInfo); // <-- Đặt trước
+router.put('/shipping', verifyFirebaseToken, updateShippingInfo);
 router.put('/:id', verifyFirebaseToken, updateCartItem);
 router.delete('/:id', verifyFirebaseToken, removeFromCart);
-router.delete('/apply', verifyFirebaseToken, clearCart);
-router.post('/apply', verifyFirebaseToken, applyDiscount);
-router.delete('/apply', verifyFirebaseToken, removeDiscount);
+router.delete('/', verifyFirebaseToken, clearCart);              
+router.post('/apply', verifyFirebaseToken, applyDiscount);       
+router.delete('/apply', verifyFirebaseToken, removeDiscount);     
 
 export default router;
