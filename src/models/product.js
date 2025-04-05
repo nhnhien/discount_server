@@ -45,6 +45,11 @@ const Product = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    sku: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+    },
     original_price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
@@ -65,32 +70,41 @@ const Product = sequelize.define(
     underscored: true,
   }
 );
-Product.beforeUpdate(async (product, options) => {
-  if (product.changed('original_price') || product.changed('final_price')) {
-    const oldProduct = await Product.findByPk(product.id);
-    if (product.changed('original_price')) {
-      await PriceHistory.create({
-        product_id: product.id,
-        variant_id: null,
-        old_price: oldProduct.original_price || 0,
-        new_price: product.original_price || 0,
-        changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Cập nhật giá gốc',
-        price_type: 'original',
-      });
-    }
 
-    if (product.changed('final_price')) {
-      await PriceHistory.create({
-        product_id: product.id,
-        variant_id: null,
-        old_price: oldProduct.final_price || 0,
-        new_price: product.final_price || 0,
-        changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Cập nhật giá bán',
-        price_type: 'final',
-      });
+Product.beforeUpdate(async (product, options) => {
+  try {
+    if (product.changed('original_price') || product.changed('final_price')) {
+      const oldProduct = await Product.findByPk(product.id);
+      if (!oldProduct) return;
+
+      if (product.changed('original_price')) {
+        await PriceHistory.create({
+          product_id: product.id,
+          variant_id: null,
+          old_price: oldProduct.original_price || 0,
+          new_price: product.original_price || 0,
+          changed_by: options.user?.id || null,
+          change_reason: options.change_reason || 'Cập nhật giá gốc',
+          price_type: 'original',
+        }); // ❌ KHÔNG truyền transaction ở đây
+      }
+
+      if (product.changed('final_price')) {
+        await PriceHistory.create({
+          product_id: product.id,
+          variant_id: null,
+          old_price: oldProduct.final_price || 0,
+          new_price: product.final_price || 0,
+          changed_by: options.user?.id || null,
+          change_reason: options.change_reason || 'Cập nhật giá bán',
+          price_type: 'final',
+        }); // ❌ KHÔNG truyền transaction ở đây
+      }
     }
+  } catch (err) {
+    console.error('❌ Error in Product.beforeUpdate:', err);
   }
 });
+
+
 export default Product;

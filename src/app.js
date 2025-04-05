@@ -14,6 +14,7 @@ import cartRouter from './router/cart.js';
 import orderRouter from './router/order.js';
 import addressRouter from './router/address.js';
 import paymentRouter from './router/payment.js';
+import priceComparisonRouter from './router/priceComparison.js'; // Add the new router
 
 const app = express();
 
@@ -43,5 +44,6 @@ app.use('/api/cart', cartRouter);
 app.use('/api/order', orderRouter);
 app.use('/api/address', addressRouter);
 app.use('/api/payment', paymentRouter);
+app.use('/api/price-comparison', priceComparisonRouter); // Register the new router
 
 export default app;

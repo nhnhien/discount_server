@@ -1,10 +1,5 @@
 import express from 'express';
-import {
-  getUserAddresses,
-  createAddress,
-  updateAddress,
-  deleteAddress,
-} from '../controller/address/address.controller.js';
+import { getUserAddresses, createAddress, updateAddress, deleteAddress } from '../controller/address/address.controller.js';
 import verifyFirebaseToken from '../middleware/auth.middleware.js';
 
 const router = express.Router();

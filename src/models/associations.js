@@ -28,6 +28,7 @@ import DiscountProduct from './discount-product.js';
 import Order from './order.js';
 import OrderItem from './order_item.js';
 import Delivery from './delivery.js';
+import ProductComparison from './product_comparison.js';
 
 const setUpAssociations = () => {
   // Role - User (1-M)
@@ -328,6 +329,28 @@ const setUpAssociations = () => {
     otherKey: 'discount_id',
     as: 'discounts',
   });
+
+  // Product - ProductComparison (1-M)
+Product.hasMany(ProductComparison, {
+  foreignKey: 'product_id',
+  as: 'price_comparisons',
+  onDelete: 'CASCADE'
+});
+ProductComparison.belongsTo(Product, {
+  foreignKey: 'product_id',
+  as: 'product'
+});
+
+// Variant - ProductComparison (1-M)
+Variant.hasMany(ProductComparison, {
+  foreignKey: 'variant_id',
+  as: 'price_comparisons',
+  onDelete: 'CASCADE'
+});
+ProductComparison.belongsTo(Variant, {
+  foreignKey: 'variant_id',
+  as: 'variant'
+});
 
   User.hasMany(Order, { foreignKey: 'user_id', as: 'orders' });
   Order.belongsTo(User, { foreignKey: 'user_id', as: 'customer' });
