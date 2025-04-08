@@ -142,62 +142,58 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
   }
 
   // Discount Code
-  if (options.appliedDiscountCode && finalPrice === originalPrice) {
-    const discountCode = options.appliedDiscountCode.trim();
-    const discount = await Discount.findOne({
-      where: {
-        discount_code: discountCode,
-        is_active: true,
-        start_date: { [Op.lte]: new Date() },
-        end_date: { [Op.gte]: new Date() },
-      },
-      include: [
-        { model: Product, as: 'products', required: false },
-        { model: Variant, as: 'variants', required: false },
-        { model: User, as: 'customers', required: false },
-      ],
-    });
+// Discount Code
+if (options.appliedDiscountCode && discountAmount === 0) {
+  const discountCode = options.appliedDiscountCode.trim();
+  const discount = await Discount.findOne({
+    where: {
+      discount_code: discountCode,
+      is_active: true,
+      start_date: { [Op.lte]: new Date() },
+      end_date: { [Op.gte]: new Date() },
+    },
+    include: [
+      { model: Product, as: 'products', required: false },
+      { model: Variant, as: 'variants', required: false },
+      { model: User, as: 'customers', required: false },
+    ],
+  });
 
-    if (discount) {
-      let isApplicable = true;
-      
-      // Kiểm tra sản phẩm
-      if (
-        discount.products?.length > 0 &&
-        !discount.products.some(p => p.id === productId)
-      ) isApplicable = false;
-      
-      // Kiểm tra biến thể
-      if (
-        discount.variants?.length > 0 &&
-        variantId !== null &&
-        !discount.variants.some(v => v.id === variantId)
-      ) isApplicable = false;
-      
-      // Kiểm tra khách hàng
-      if (
-        discount.customers?.length > 0 &&
-        !discount.customers.some(u => u.id === effectiveUserId)
-      ) isApplicable = false;
-      
-      // Kiểm tra giá trị đơn hàng tối thiểu - CHỈ KIỂM TRA Ở MỨC ĐƠN HÀNG
-      // (min_order_amount sẽ được kiểm tra ở cart.controller.js)
+  if (discount) {
+    let isApplicable = true;
 
-      if (isApplicable) {
-        let totalDiscount = 0;
+    if (
+      discount.products?.length > 0 &&
+      !discount.products.some(p => p.id === productId)
+    ) isApplicable = false;
 
-        if (discount.discount_type === 'percentage') {
-          totalDiscount = (discount.value / 100) * originalPrice;
-        } else if (discount.discount_type === 'fixed') {
-          totalDiscount = discount.value / quantity; // Chia đều cho số lượng
-        }
+    if (
+      discount.variants?.length > 0 &&
+      variantId !== null &&
+      !discount.variants.some(v => v.id === variantId)
+    ) isApplicable = false;
 
-        discountAmount = totalDiscount;
-        finalPrice = Math.max(originalPrice - totalDiscount, 0);
-        appliedRule = discount;
+    if (
+      discount.customers?.length > 0 &&
+      !discount.customers.some(u => u.id === effectiveUserId)
+    ) isApplicable = false;
+
+    if (isApplicable) {
+      let totalDiscount = 0;
+
+      if (discount.discount_type === 'percentage') {
+        totalDiscount = (discount.value / 100) * originalPrice;
+      } else if (discount.discount_type === 'fixed') {
+        totalDiscount = discount.value / quantity;
       }
+
+      discountAmount = totalDiscount;
+      finalPrice = Math.max(originalPrice - totalDiscount, 0);
+      appliedRule = discount;
     }
   }
+}
+
 
   // LƯU Ý: KHÔNG NHÂN VỚI QUANTITY Ở ĐÂY
   // Trả về đơn giá của một sản phẩm, để controller tự tính tổng

@@ -5,13 +5,35 @@ import { calculatePrice } from '../../util/calculatePrice.js';
 
 export const getOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, payment_status, start_date, end_date, search } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      payment_status,
+      start_date,
+      end_date,
+      search,
+    } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const whereClause = {
-      user_id: req.user.id, // ✅ Lọc theo user hiện tại
-    };
+    const whereClause = {};
 
+    // ✅ Search logic
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      whereClause[Op.or] = [
+        { order_number: { [Op.like]: `%${trimmedSearch}%` } },
+        { '$customer.name$': { [Op.like]: `%${trimmedSearch}%` } },
+        { '$customer.email$': { [Op.like]: `%${trimmedSearch}%` } },
+      ];
+    }
+
+    // ✅ Phân quyền admin / customer
+    if (req.user.role !== 'admin') {
+      whereClause.user_id = req.user.id;
+    }
+
+    // ✅ Filter trạng thái
     if (status) {
       whereClause.status = status;
     }
@@ -41,6 +63,7 @@ export const getOrders = async (req, res) => {
           model: User,
           as: 'customer',
           attributes: ['id', 'name', 'email', 'phone'],
+          required: false, // ✅ để hỗ trợ search trên bảng liên kết
         },
         {
           model: OrderItem,
@@ -71,6 +94,7 @@ export const getOrders = async (req, res) => {
           attributes: ['id', 'status', 'tracking_number', 'carrier', 'shipped_at', 'delivered_at'],
         },
       ],
+      subQuery: false,
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: offset,

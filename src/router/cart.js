@@ -20,6 +20,6 @@ router.put('/:id', verifyFirebaseToken, updateCartItem);
 router.delete('/:id', verifyFirebaseToken, removeFromCart);
 router.delete('/', verifyFirebaseToken, clearCart);              
 router.post('/apply', verifyFirebaseToken, applyDiscount);       
-router.delete('/apply', verifyFirebaseToken, removeDiscount);     
+router.post('/remove-discount', verifyFirebaseToken, removeDiscount);
 
 export default router;

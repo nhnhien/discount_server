@@ -382,6 +382,12 @@ export const getAvailableDiscounts = async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: filtered.map((d) => d.discount_code),
+    data: filtered.map((d) => ({
+      discount_code: d.discount_code,
+      remaining_uses: d.usage_limit ? Math.max(d.usage_limit - d.usage_count, 0) : null,
+      expires_in_days: d.end_date
+        ? Math.ceil((new Date(d.end_date) - new Date()) / (1000 * 60 * 60 * 24))
+        : null,
+    })),
   });
 };

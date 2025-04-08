@@ -43,7 +43,7 @@ const getCategoryById = async (req, res) => {
 
 const createCategory = async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, image_url } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -52,7 +52,7 @@ const createCategory = async (req, res) => {
       });
     }
 
-    const category = await Category.create({ name, description });
+    const category = await Category.create({ name, description, image_url });
 
     res.status(201).json({
       success: true,
@@ -68,10 +68,11 @@ const createCategory = async (req, res) => {
   }
 };
 
+
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, image_url } = req.body;
 
     const category = await Category.findByPk(id);
 
@@ -82,7 +83,7 @@ const updateCategory = async (req, res) => {
       });
     }
 
-    await category.update({ name, description });
+    await category.update({ name, description, image_url });
 
     res.status(200).json({
       success: true,
@@ -97,6 +98,7 @@ const updateCategory = async (req, res) => {
     });
   }
 };
+
 
 const deleteCategory = async (req, res) => {
   try {

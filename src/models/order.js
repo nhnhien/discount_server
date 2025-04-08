@@ -109,6 +109,8 @@ const Order = sequelize.define(
     freezeTableName: true,
     timestamps: true,
     underscored: true,
+    createdAt: 'created_at', 
+    updatedAt: 'updated_at',
     hooks: {
       beforeCreate: (order) => {
         const timestamp = new Date().getTime();

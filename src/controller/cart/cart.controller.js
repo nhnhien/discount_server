@@ -29,16 +29,14 @@ export const getCart = async (req, res) => {
         subtotal: 0,
         total_amount: 0,
         discount_code: null,
-        applied_discount_amount: 0
+        applied_discount_amount: 0,
       },
     });
 
-    // ✅ Đọc danh sách item được chọn checkbox (chuỗi id cách nhau bởi dấu phẩy)
     const selectedItemIds = req.query.selected_item_ids
       ? req.query.selected_item_ids.split(',').map((id) => parseInt(id))
       : null;
 
-    // Chỉ áp dụng discount nếu được yêu cầu rõ ràng VÀ có discount_code
     const shouldApplyDiscount = req.query.apply_discount === 'true' && cart.discount_code;
 
     let shippingAddress = null;
@@ -62,17 +60,13 @@ export const getCart = async (req, res) => {
       ],
     });
 
-    // Tính toán lại giá của mỗi item để đảm bảo chính xác
     const formattedItems = await Promise.all(
       cartItems.map(async (item) => {
         const productData = item.product;
         const variantData = item.variant;
         const quantity = item.quantity;
 
-        // Không áp dụng mã giảm giá ở cấp độ sản phẩm
-        const priceData = await calculatePrice(userId, item.product_id, item.variant_id, quantity, {
-          // KHÔNG truyền appliedDiscountCode ở đây
-        });
+        const priceData = await calculatePrice(userId, item.product_id, item.variant_id, quantity);
 
         const originalUnitPrice = Number(variantData?.original_price || productData?.original_price || 0);
         const unitPrice = priceData.finalPrice;
@@ -95,19 +89,15 @@ export const getCart = async (req, res) => {
       })
     );
 
-    // Tính tổng cho các item được chọn
-    const selectedItems = selectedItemIds 
-      ? formattedItems.filter(item => selectedItemIds.includes(item.id)) 
+    const selectedItems = selectedItemIds
+      ? formattedItems.filter((item) => selectedItemIds.includes(item.id))
       : formattedItems;
-    
-    // Tính lại subtotal rõ ràng từ các item
+
     const subtotal = selectedItems.reduce((sum, item) => sum + item.total_price, 0);
-    
+
     let totalDiscount = 0;
-    
-    // Chỉ tính discount nếu cần áp dụng
+
     if (shouldApplyDiscount) {
-      // Lấy thông tin chi tiết về mã giảm giá
       const discount = await Discount.findOne({
         where: {
           discount_code: cart.discount_code,
@@ -121,38 +111,32 @@ export const getCart = async (req, res) => {
           { model: User, as: 'customers', required: false },
         ],
       });
-      
+
       if (discount) {
-        // Kiểm tra min_order_amount
         const minOrderAmount = Number(discount.min_order_amount);
         if (!isNaN(minOrderAmount) && minOrderAmount > 0 && subtotal < minOrderAmount) {
-          // Không áp dụng discount nếu không đạt min_order_amount
-          console.log(`Skipping discount: subtotal ${subtotal} less than min_order_amount ${minOrderAmount}`);
+          console.log(`Không áp dụng mã vì chưa đạt min_order_amount: ${subtotal} < ${minOrderAmount}`);
         } else {
-          // Kiểm tra các điều kiện khác
           let canApplyDiscount = true;
-          
-          if (discount.products && discount.products.length > 0) {
+
+          if (discount.products?.length > 0) {
             const productIdsInSelection = selectedItems.map(item => item.product_id);
             const hasMatchingProduct = discount.products.some(p => productIdsInSelection.includes(p.id));
             if (!hasMatchingProduct) canApplyDiscount = false;
           }
-          
-          if (discount.variants && discount.variants.length > 0) {
-            const variantIdsInSelection = selectedItems
-              .filter(item => item.variant_id)
-              .map(item => item.variant_id);
+
+          if (discount.variants?.length > 0) {
+            const variantIdsInSelection = selectedItems.map(item => item.variant_id).filter(Boolean);
             const hasMatchingVariant = discount.variants.some(v => variantIdsInSelection.includes(v.id));
             if (!hasMatchingVariant) canApplyDiscount = false;
           }
-          
-          if (discount.customers && discount.customers.length > 0) {
+
+          if (discount.customers?.length > 0) {
             const isCustomerAllowed = discount.customers.some(c => c.id === userId);
             if (!isCustomerAllowed) canApplyDiscount = false;
           }
-          
+
           if (canApplyDiscount) {
-            // Tính giảm giá dựa trên loại
             if (discount.discount_type === 'percentage') {
               totalDiscount = (subtotal * Number(discount.value)) / 100;
             } else if (discount.discount_type === 'fixed') {
@@ -160,8 +144,7 @@ export const getCart = async (req, res) => {
             } else if (discount.discount_type === 'free_shipping') {
               totalDiscount = Number(cart.shipping_fee || 0);
             }
-            
-            // Áp dụng giới hạn giảm giá tối đa nếu có
+
             const maxDiscountAmount = Number(discount.max_discount_amount);
             if (!isNaN(maxDiscountAmount) && maxDiscountAmount > 0 && totalDiscount > maxDiscountAmount) {
               totalDiscount = maxDiscountAmount;
@@ -170,17 +153,15 @@ export const getCart = async (req, res) => {
         }
       }
     } else {
-      // Nếu không áp dụng discount cấp giỏ hàng, tính tổng các discount của từng sản phẩm
-      totalDiscount = selectedItems.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
+      totalDiscount = 0; // ❗ KHÔNG tính lại discount ở cấp giỏ hàng nếu không có mã
     }
 
     const totalAmount = Math.max(subtotal - totalDiscount, 0);
 
-    // Cập nhật lại subtotal và total_amount trong cart để đảm bảo nhất quán
     await cart.update({
       subtotal,
       applied_discount_amount: totalDiscount,
-      total_amount: totalAmount
+      total_amount: totalAmount,
     });
 
     res.status(200).json({
@@ -208,6 +189,7 @@ export const getCart = async (req, res) => {
     });
   }
 };
+
 
 
 export const addToCart = async (req, res) => {
@@ -1006,6 +988,8 @@ export const removeDiscount = async (req, res) => {
 
   try {
     const userId = req.user.id;
+    const { selected_item_ids = [] } = req.body;
+
     const cart = await Cart.findOne({
       where: { user_id: userId, status: 'active' },
       transaction,
@@ -1019,6 +1003,7 @@ export const removeDiscount = async (req, res) => {
       });
     }
 
+    // Gỡ mã và cập nhật tổng tiền lại
     await cart.update(
       {
         discount_code: null,
@@ -1029,10 +1014,10 @@ export const removeDiscount = async (req, res) => {
 
     await transaction.commit();
 
-    // Make sure getCart doesn't try to apply a discount
+    // Gắn lại selected_item_ids để `getCart` tính lại chính xác
     req.query.apply_discount = 'false';
-    
-    // Gọi lại getCart để lấy dữ liệu mới nhất
+    req.query.selected_item_ids = selected_item_ids.join(',');
+
     return await getCart(req, res);
   } catch (error) {
     await transaction.rollback();
@@ -1044,6 +1029,7 @@ export const removeDiscount = async (req, res) => {
     });
   }
 };
+
 
 export default {
   getCart,
