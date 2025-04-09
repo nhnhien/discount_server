@@ -391,3 +391,33 @@ export const getAvailableDiscounts = async (req, res) => {
     })),
   });
 };
+
+export const toggleDiscountActive = async (req, res) => {
+  const { id } = req.params;
+  const { is_active } = req.body;
+
+  try {
+    const discount = await Discount.findByPk(id);
+    if (!discount) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy mã giảm giá',
+      });
+    }
+
+    await discount.update({ is_active });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái thành công',
+      data: discount,
+    });
+  } catch (error) {
+    console.error('toggleDiscountActive error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi cập nhật trạng thái mã giảm giá',
+      error: error.message,
+    });
+  }
+};

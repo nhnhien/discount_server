@@ -6,7 +6,8 @@ import {
   updateDiscount,
   deleteDiscount,
   validateDiscountCode,
-  getAvailableDiscounts, // ✅ thêm dòng này
+  getAvailableDiscounts,
+  toggleDiscountActive
 } from '../controller/discount/discount.controller.js';
 
 const router = express.Router();
@@ -20,5 +21,6 @@ router.get('/:id', getDiscountById);
 router.post('/', createDiscount);
 router.put('/:id', updateDiscount);
 router.delete('/:id', deleteDiscount);
+router.patch('/:id/active', toggleDiscountActive);
 
 export default router;

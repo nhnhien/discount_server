@@ -709,6 +709,32 @@ export const getQuantityBreaksByVariant = async (req, res) => {
     });
   }
 };
+export const toggleActive = async (req, res) => {
+  const { id } = req.params;
+  const { is_active } = req.body;
+
+  try {
+    const rule = await QuantityBreak.findByPk(id);
+    if (!rule) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy QuantityBreak' });
+    }
+
+    await rule.update({ is_active });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái thành công',
+      data: rule,
+    });
+  } catch (error) {
+    console.error('Error in toggleActive:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi cập nhật trạng thái',
+      error: error.message,
+    });
+  }
+};
 
 export default {
   getQuantityBreaks,
@@ -719,4 +745,5 @@ export default {
   calculatePrice,
   getQuantityBreaksByProduct,
   getQuantityBreaksByVariant,
+  toggleActive 
 };

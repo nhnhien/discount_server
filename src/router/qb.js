@@ -9,6 +9,7 @@ import {
   calculatePrice,
   getQuantityBreaksByProduct,
   getQuantityBreaksByVariant,
+  toggleActive
 } from '../controller/quantity-break/qb.controller.js';
 
 const router = express.Router();
@@ -22,5 +23,6 @@ router.get('/:id', getQuantityBreakById);
 router.post('/', createQuantityBreak);
 router.put('/:id', updateQuantityBreak);
 router.delete('/:id', deleteQuantityBreak);
+router.patch('/:id/active', toggleActive);
 
 export default router;

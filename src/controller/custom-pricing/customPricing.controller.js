@@ -313,4 +313,36 @@ const deleteCPRule = async (req, res) => {
 
 const applyCPRule = async (req, res) => {};
 
-export { getCPRules, getCPRule, createCPRule, updateCPRule, deleteCPRule, applyCPRule };
+const toggleCPActive = async (req, res) => {
+  const { id } = req.params;
+  const { is_active } = req.body;
+
+  try {
+    const rule = await CustomPricing.findByPk(id);
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy rule',
+      });
+    }
+
+    await rule.update({ is_active });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái thành công',
+      data: rule,
+    });
+  } catch (error) {
+    console.error('toggleCPActive error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi cập nhật trạng thái rule',
+      error: error.message,
+    });
+  }
+};
+
+
+
+export { getCPRules, getCPRule, createCPRule, updateCPRule, deleteCPRule, applyCPRule, toggleCPActive };

@@ -26,6 +26,7 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
     where: {
       start_date: { [Op.lte]: new Date() },
       end_date: { [Op.gte]: new Date() },
+      is_active: true,
     },
     include: [
       { model: User, as: 'customers', required: false },
@@ -33,6 +34,7 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
       { model: Variant, as: 'variants', through: { attributes: ['amount'] }, required: false },
     ],
   });
+  
 
   const filteredRules = cpRules.filter(rule => {
     if (rule.customers.length > 0) {
@@ -77,6 +79,7 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
       where: {
         start_date: { [Op.lte]: new Date() },
         end_date: { [Op.gte]: new Date() },
+        is_active: true, 
       },
       include: [
         { model: Product, as: 'products' },
@@ -84,6 +87,7 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
         { model: User, as: 'customers' },
       ],
     });
+    
 
     const applicableQB = qbRules.find((rule) => {
       const isUserMatched = rule.customers?.some((u) => u.id === effectiveUserId);

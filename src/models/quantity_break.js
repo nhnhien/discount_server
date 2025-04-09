@@ -51,6 +51,11 @@ const QuantityBreak = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    }
   },
   {
     tableName: 'quantity_break',

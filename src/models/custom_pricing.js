@@ -39,6 +39,10 @@ const CustomPricing = sequelize.define(
       allowNull: false,
       defaultValue: false,
     },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true, 
+    }
   },
   {
     tableName: 'custom_pricing',
