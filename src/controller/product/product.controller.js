@@ -9,7 +9,7 @@ import {
   Variant,
   VariantValue,
 } from '../../models/index.js';
-import { Op } from 'sequelize';
+import { Op, fn, col, where } from 'sequelize'; 
 import { calculatePrice } from '../../util/calculatePrice.js';
 
 const formatProduct = (product) => {
@@ -71,15 +71,22 @@ const productIncludeOptions = [
 ];
 
 const getProduct = async (req, res) => {
-  const { page = 1, limit = 10, search, categoryId } = req.query;
+  const { page = 1, limit = 10, search, categoryId, discount } = req.query;
   const userId = req.query.userId ? Number(req.query.userId) : req.user?.id || null;
-  console.log('>>> req.user:', req.user); // 👈 kiểm tra req.user có tồn tại không
+  console.log('>>> req.user:', req.user);
 
   try {
     const whereCondition = {};
-    if (search) {
-      whereCondition.name = { [Op.iLike]: `%${search}%` };
+    if (search?.trim()) {
+      const normalizedSearch = search.trim().toLowerCase();
+      whereCondition[Op.or] = [
+        { name: { [Op.like]: `%${normalizedSearch}%` } },
+        where(fn('LOWER', col('category.name')), {
+          [Op.like]: `%${normalizedSearch}%`
+        }),
+      ];
     }
+    
     if (categoryId) {
       whereCondition.category_id = categoryId;
     }
@@ -87,7 +94,15 @@ const getProduct = async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const { count, rows: products } = await Product.findAndCountAll({
       where: whereCondition,
-      include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }, ...productIncludeOptions],
+      include: [
+        {
+          model: Category,
+          as: 'category',
+          attributes: ['id', 'name'],
+          required: true,
+        },
+        ...productIncludeOptions
+      ],
       limit: parseInt(limit),
       offset: offset,
     });
@@ -96,18 +111,14 @@ const getProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'No products found' });
     }
 
-
-    const updatedProducts = await Promise.all(
+    let updatedProducts = await Promise.all(
       products.map(async (product) => {
         const productJSON = product.toJSON();
-    
-        // ✅ gọi calculatePrice cho sản phẩm chính
         const mainResult = await calculatePrice(userId, product.id, null, 1, { applyQuantityBreak: false });
         productJSON.original_price = mainResult.originalPrice;
         productJSON.final_price = mainResult.finalPrice;
         productJSON.appliedRule = mainResult.appliedRule;
-    
-        // ✅ gọi cho từng variant nếu có
+
         if (productJSON.has_variant && Array.isArray(productJSON.variants)) {
           for (const variant of productJSON.variants) {
             const variantResult = await calculatePrice(userId, product.id, variant.id, 1, { applyQuantityBreak: false });
@@ -116,17 +127,24 @@ const getProduct = async (req, res) => {
             variant.appliedRule = variantResult.appliedRule;
           }
         }
-    
+
         const formattedProduct = formatProduct(productJSON);
-    
+
         return {
           ...formattedProduct,
           discountPercentage: 0,
-          appliedRule: productJSON.appliedRule,
+          // 👇 Convert Sequelize instance to plain object
+          appliedRule: productJSON.appliedRule ? productJSON.appliedRule.toJSON?.() ?? productJSON.appliedRule : null,
         };
       })
     );
-    
+
+    // 👇 Lọc chính xác theo discount (sau khi đã convert appliedRule)
+    if (discount === 'true') {
+      updatedProducts = updatedProducts.filter(p => p.appliedRule);
+    } else if (discount === 'false') {
+      updatedProducts = updatedProducts.filter(p => !p.appliedRule);
+    }
 
     return res.status(200).json({
       success: true,
@@ -144,6 +162,7 @@ const getProduct = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 const getProductById = async (req, res) => {
