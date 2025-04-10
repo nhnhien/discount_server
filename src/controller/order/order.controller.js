@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import { Order, User, Address, Product, Variant, Cart, CartItem, Delivery, OrderItem, Discount, sequelize } from '../../models/index.js';
 import { calculatePrice } from '../../util/calculatePrice.js';
+import { getCartSummary } from '../../util/cartUtils.js';
 
 
 export const getOrders = async (req, res) => {
@@ -209,300 +210,139 @@ export const getOrderById = async (req, res) => {
 export const createOrder = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const { items, shipping_address_id, billing_address_id, discount_code, payment_method, notes } = req.body;
-  
+    const { items, shipping_address_id, billing_address_id, discount_code, payment_method, notes, cart_item_ids = [] } = req.body;
     const user_id = req.user.id;
+
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vui lòng cung cấp ít nhất một sản phẩm trong đơn hàng',
-      });
+      return res.status(400).json({ success: false, message: 'Vui lòng cung cấp ít nhất một sản phẩm trong đơn hàng' });
     }
 
     if (!shipping_address_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vui lòng cung cấp địa chỉ giao hàng',
-      });
+      return res.status(400).json({ success: false, message: 'Vui lòng cung cấp địa chỉ giao hàng' });
     }
-    const shippingAddress = await Address.findOne({
-      where: {
-        id: shipping_address_id,
-        user_id: user_id,
-      },
-    });
 
+    const shippingAddress = await Address.findOne({ where: { id: shipping_address_id, user_id } });
     if (!shippingAddress) {
-      return res.status(404).json({
-        success: false,
-        message: 'Địa chỉ giao hàng không tồn tại hoặc không thuộc về bạn',
-      });
+      return res.status(404).json({ success: false, message: 'Địa chỉ giao hàng không tồn tại hoặc không thuộc về bạn' });
     }
-    let billingAddressId = billing_address_id;
-    if (!billingAddressId) {
-      billingAddressId = shipping_address_id;
-    } else {
-      const billingAddress = await Address.findOne({
-        where: {
-          id: billingAddressId,
-          user_id: user_id,
-        },
-      });
 
+    const billingAddressId = billing_address_id || shipping_address_id;
+    if (billing_address_id) {
+      const billingAddress = await Address.findOne({ where: { id: billing_addressId, user_id } });
       if (!billingAddress) {
-        return res.status(404).json({
-          success: false,
-          message: 'Địa chỉ thanh toán không tồn tại hoặc không thuộc về bạn',
-        });
-      }
-    }
-    let discount = null;
-    let discountAmount = 0;
-
-    if (discount_code) {
-      discount = await Discount.findOne({
-        where: {
-          discount_code,
-          is_active: true,
-          start_date: { [Op.lte]: new Date() },
-          end_date: { [Op.or]: [{ [Op.gte]: new Date() }, { [Op.is]: null }] },
-        },
-        include: [
-          { model: Product, as: 'products', through: { attributes: [] } },
-          { model: Variant, as: 'variants', through: { attributes: [] } },
-          { model: User, as: 'customers', through: { attributes: [] } },
-        ],
-      });
-
-      if (!discount) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mã giảm giá không hợp lệ hoặc đã hết hạn',
-        });
-      }
-      if (discount.usage_limit && discount.usage_count >= discount.usage_limit) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mã giảm giá đã hết lượt sử dụng',
-        });
-      }
-      if (discount.customers && discount.customers.length > 0 && !discount.customers.some((u) => u.id === user_id)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Mã giảm giá không áp dụng cho tài khoản của bạn',
-        });
+        return res.status(404).json({ success: false, message: 'Địa chỉ thanh toán không hợp lệ' });
       }
     }
 
-    let subtotal = 0;
-    let taxAmount = 0;
-    let shippingFee = 0;
+    // 🧠 Dùng hàm tổng hợp giỏ hàng (selected items)
+    const cartSummary = await getCartSummary(user_id, cart_item_ids, !!discount_code);
+    const { subtotal, shipping_fee, discount_amount, total_amount } = cartSummary;
+
+    // 🧱 Tạo danh sách order item từ items[]
     const orderItems = [];
-    
     for (const item of items) {
       const { product_id, variant_id, quantity } = item;
-    
-      if (!product_id || !quantity || quantity <= 0) {
+
+      if (!product_id || quantity <= 0) {
         await transaction.rollback();
-        return res.status(400).json({
-          success: false,
-          message: 'Thông tin sản phẩm không hợp lệ',
-        });
+        return res.status(400).json({ success: false, message: 'Thông tin sản phẩm không hợp lệ' });
       }
-    
+
       const product = await Product.findByPk(product_id);
       if (!product) {
         await transaction.rollback();
-        return res.status(404).json({
-          success: false,
-          message: `Không tìm thấy sản phẩm với ID: ${product_id}`,
-        });
+        return res.status(404).json({ success: false, message: `Không tìm thấy sản phẩm với ID: ${product_id}` });
       }
-    
+
       let variant = null;
+      let sku = product.sku || '';
+      let productName = product.name;
+      let variantName = '';
       let unitPrice = 0;
       let originalPrice = 0;
-      let sku = product.sku || '';
-      let itemName = product.name;
-      let variantName = '';
-    
+
       if (variant_id) {
         variant = await Variant.findOne({ where: { id: variant_id, product_id } });
-        if (!variant) {
+        if (!variant || variant.stock_quantity < quantity) {
           await transaction.rollback();
-          return res.status(404).json({
-            success: false,
-            message: `Không tìm thấy biến thể với ID: ${variant_id}`,
-          });
+          return res.status(400).json({ success: false, message: `Tồn kho không đủ cho biến thể: ${variant_id}` });
         }
-        if (variant.stock_quantity < quantity) {
-          await transaction.rollback();
-          return res.status(400).json({
-            success: false,
-            message: `Tồn kho không đủ cho biến thể: ${variant_id}`,
-          });
-        }
-    
-        const priceData = await calculatePrice(req.user.id, product_id, variant_id, quantity, transaction);
-
-        unitPrice = priceData.finalPrice;
-        originalPrice = priceData.originalPrice;
         sku = variant.sku;
       } else {
         if (product.stock_quantity < quantity) {
           await transaction.rollback();
-          return res.status(400).json({
-            success: false,
-            message: `Tồn kho không đủ cho sản phẩm: ${product_id}`,
-          });
+          return res.status(400).json({ success: false, message: `Tồn kho không đủ cho sản phẩm: ${product_id}` });
         }
-    
-        const priceData = await calculatePrice(req.user.id, product_id, null, quantity, transaction);
-        unitPrice = priceData.finalPrice;
-        originalPrice = priceData.originalPrice;
       }
-    
-      const itemSubtotal = unitPrice * quantity;
-      subtotal += itemSubtotal;
-    
+
+      const priceData = await calculatePrice(user_id, product_id, variant_id, quantity);
+      unitPrice = priceData.finalPrice;
+      originalPrice = priceData.originalPrice;
+
       orderItems.push({
         product_id,
         variant_id,
         quantity,
         unit_price: unitPrice,
         original_price: originalPrice,
-        subtotal: itemSubtotal,
-        product_name: itemName,
-        variant_name: variantName,
-        sku,
+        subtotal: unitPrice * quantity,
         item_discount: originalPrice - unitPrice,
+        sku,
+        product_name: productName,
+        variant_name: variantName,
       });
     }
-    
-    if (discount) {
-      switch (discount.discount_type) {
-        case 'percentage':
-          discountAmount = (subtotal * discount.value) / 100;
-          break;
-        case 'fixed':
-          discountAmount = discount.value;
-          break;
-        case 'free_shipping':
-          discountAmount = shippingFee;
-          shippingFee = 0;
-          break;
-      }
-      if (discount.max_discount_amount && discountAmount > discount.max_discount_amount) {
-        discountAmount = discount.max_discount_amount;
-      }
-      if (discount.min_order_amount && subtotal < discount.min_order_amount) {
-        return res.status(400).json({
-          success: false,
-          message: `Giá trị đơn hàng tối thiểu để sử dụng mã giảm giá là ${discount.min_order_amount}`,
-        });
-      }
-      if (discount.products && discount.products.length > 0) {
-        const discountProductIds = discount.products.map((p) => p.id);
-        const orderProductIds = orderItems.map((item) => item.product_id);
-        if (!orderProductIds.some((id) => discountProductIds.includes(id))) {
-          return res.status(400).json({
-            success: false,
-            message: 'Mã giảm giá không áp dụng cho sản phẩm nào trong đơn hàng',
-          });
-        }
-        if (discount.discount_type !== 'free_shipping') {
-          discountAmount = 0;
 
-          orderItems.forEach((item) => {
-            if (discountProductIds.includes(item.product_id)) {
-              let itemDiscount = 0;
-
-              switch (discount.discount_type) {
-                case 'percentage':
-                  itemDiscount = (item.subtotal * discount.value) / 100;
-                  break;
-                case 'fixed':
-                  const eligibleItems = orderItems.filter((i) => discountProductIds.includes(i.product_id));
-                  const totalEligibleAmount = eligibleItems.reduce((sum, i) => sum + i.subtotal, 0);
-                  itemDiscount = discount.value * (item.subtotal / totalEligibleAmount);
-                  break;
-              }
-
-              item.item_discount = itemDiscount;
-              discountAmount += itemDiscount;
-            }
-          });
-        }
-      }
-      //   if (discount.variants && discount.variants.length > 0) {
-
-      //   }
-    }
-
-    let totalAmount = subtotal + taxAmount + shippingFee - discountAmount;
-    if (totalAmount < 0) totalAmount = 0;
     const orderNumber = `ORD-${Date.now()}`;
-    const order = await Order.create(
-      {
-        order_number: orderNumber,
-        user_id,
-        status: 'pending',
-        total_amount: totalAmount,
-        subtotal,
-        shipping_fee: shippingFee,
-        tax_amount: taxAmount,
-        discount_amount: discountAmount,
-        discount_id: discount ? discount.id : null,
-        payment_method: payment_method || 'cod',
-        payment_status: 'pending',
-        billing_address_id: billingAddressId,
-        shipping_address_id,
-        notes,
-      },
-      { transaction }
-    );
+    const order = await Order.create({
+      order_number: orderNumber,
+      user_id,
+      status: 'pending',
+      subtotal,
+      shipping_fee,
+      tax_amount: 0,
+      discount_amount,
+      total_amount,
+      discount_code: discount_code || null,
+      payment_method: payment_method || 'cod',
+      payment_status: 'pending',
+      shipping_address_id,
+      billing_address_id: billingAddressId,
+      notes,
+    }, { transaction });
+
     for (const item of orderItems) {
-      await OrderItem.create(
-        {
-          ...item,
-          order_id: order.id,
-        },
-        { transaction }
-      );
+      await OrderItem.create({ ...item, order_id: order.id }, { transaction });
     }
+
     for (const item of items) {
       const { product_id, variant_id, quantity } = item;
-
       if (variant_id) {
         await Variant.decrement({ stock_quantity: quantity }, { where: { id: variant_id }, transaction });
       } else {
         await Product.decrement({ stock_quantity: quantity }, { where: { id: product_id }, transaction });
       }
     }
-    if (discount) {
-      await discount.increment('usage_count', { transaction });
-    }
-    await Delivery.create(
-      {
-        order_id: order.id,
-        status: 'preparing',
-        estimated_delivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      { transaction }
-    );
 
-    await transaction.commit();
-
-    // 🧹 Xoá những cart item đã được mua
-    if (req.body.cart_item_ids && req.body.cart_item_ids.length > 0) {
-      await CartItem.destroy({
-        where: {
-          id: req.body.cart_item_ids,
-        },
+    if (discount_code) {
+      await Discount.increment('usage_count', {
+        where: { discount_code },
+        transaction
       });
     }
 
-    // Truy vấn lại order để trả về kết quả chi tiết
+    await Delivery.create({
+      order_id: order.id,
+      status: 'preparing',
+      estimated_delivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    }, { transaction });
+
+    await transaction.commit();
+
+    if (cart_item_ids.length > 0) {
+      await CartItem.destroy({ where: { id: cart_item_ids } });
+    }
+
     const createdOrder = await Order.findByPk(order.id, {
       include: [
         {
@@ -521,23 +361,20 @@ export const createOrder = async (req, res) => {
         },
         {
           model: Delivery,
-          as: 'delivery', // ✅ FIXED: thêm alias đúng
+          as: 'delivery',
         },
       ],
     });
-  
+
     return res.status(201).json({
       success: true,
       message: 'Đặt hàng thành công',
       data: createdOrder,
     });
-  
   } catch (error) {
-    // ✅ Rollback nếu transaction chưa hoàn tất
-    if (transaction && transaction.finished !== 'commit' && transaction.finished !== 'rollback') {
+    if (transaction && transaction.finished !== 'commit') {
       await transaction.rollback();
     }
-  
     console.error('Error in createOrder:', error);
     return res.status(500).json({
       success: false,

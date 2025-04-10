@@ -12,6 +12,7 @@ import {
 } from '../../models/index.js';
 import { Op } from 'sequelize';
 import { calculatePrice } from '../../util/calculatePrice.js';
+import { ShippingFee } from '../../models/index.js';
 
 
 export const getCart = async (req, res) => {
@@ -43,6 +44,14 @@ export const getCart = async (req, res) => {
     if (cart.shipping_address_id) {
       shippingAddress = await Address.findByPk(cart.shipping_address_id);
     }
+    
+    let shippingFeeAmount = 0;
+const FREE_SHIPPING_THRESHOLD = 500000;
+
+    
+    
+    
+    
 
     const cartItems = await CartItem.findAll({
       where: { cart_id: cart.id },
@@ -93,8 +102,32 @@ export const getCart = async (req, res) => {
       ? formattedItems.filter((item) => selectedItemIds.includes(item.id))
       : formattedItems;
 
-    const subtotal = selectedItems.reduce((sum, item) => sum + item.total_price, 0);
+      const subtotal = selectedItems.reduce((sum, item) => sum + item.total_price, 0);
 
+      // Tính phí ship sau khi có subtotal
+      if (shippingAddress && shippingAddress.city) {
+        const shippingFeeRecord = await ShippingFee.findOne({
+          where: {
+            region: shippingAddress.city,
+            is_active: true,
+          },
+        });
+      
+        if (shippingFeeRecord) {
+          shippingFeeAmount = Number(shippingFeeRecord.fee);
+        } else {
+          shippingFeeAmount = 10000; // fallback mặc định
+        }
+      
+        // Miễn phí ship nếu đủ điều kiện
+        if (subtotal >= FREE_SHIPPING_THRESHOLD) {
+          shippingFeeAmount = 0;
+        }
+      } else {
+        // ❗ Nếu chưa có địa chỉ => không tính phí ship
+        shippingFeeAmount = 0;
+      }
+    
     let totalDiscount = 0;
 
     if (shouldApplyDiscount) {
@@ -156,13 +189,15 @@ export const getCart = async (req, res) => {
       totalDiscount = 0; // ❗ KHÔNG tính lại discount ở cấp giỏ hàng nếu không có mã
     }
 
-    const totalAmount = Math.max(subtotal - totalDiscount, 0);
+    const totalAmount = Math.max(subtotal - totalDiscount + shippingFeeAmount, 0);
 
     await cart.update({
       subtotal,
       applied_discount_amount: totalDiscount,
+      shipping_fee: shippingFeeAmount,
       total_amount: totalAmount,
     });
+    
 
     res.status(200).json({
       success: true,
@@ -171,7 +206,7 @@ export const getCart = async (req, res) => {
         items: formattedItems,
         item_count: formattedItems.length,
         subtotal: subtotal,
-        shipping_fee: cart.shipping_fee || 0,
+        shipping_fee: shippingFeeAmount,
         discount_code: shouldApplyDiscount ? cart.discount_code : null,
         discount_amount: totalDiscount,
         total_amount: totalAmount,
@@ -654,12 +689,14 @@ export const clearCart = async (req, res) => {
   }
 };
 
+
 export const updateShippingInfo = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
     const userId = req.user.id;
     const { shipping_address_id, note } = req.body;
+
     const cart = await Cart.findOne({
       where: { user_id: userId, status: 'active' },
       transaction,
@@ -702,15 +739,12 @@ export const updateShippingInfo = async (req, res) => {
 
     await transaction.commit();
 
-    res.status(200).json({
-      success: true,
-      message: 'Đã cập nhật thông tin giao hàng',
-      data: {
-        cart_id: cart.id,
-        shipping_address_id: cart.shipping_address_id,
-        note: cart.note,
-      },
-    });
+    // ✅ Sau khi cập nhật, gọi lại getCart để trả về thông tin đầy đủ (gồm phí vận chuyển mới)
+    req.query = {
+      apply_discount: 'false', // mặc định không tính discount, frontend sẽ trigger lại nếu cần
+    };
+    await getCart(req, res);
+
   } catch (error) {
     await transaction.rollback();
     console.error('Error updating shipping info:', error);

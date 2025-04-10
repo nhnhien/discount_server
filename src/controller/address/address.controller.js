@@ -1,4 +1,4 @@
-import { Address } from '../../models/index.js';
+import { Address, ShippingFee } from '../../models/index.js';
  
  export const getUserAddresses = async (req, res) => {
    try {
@@ -47,7 +47,19 @@ import { Address } from '../../models/index.js';
        address,
        city,
      });
- 
+ // Tự tạo phí vận chuyển nếu chưa có cho thành phố đó
+const existingFee = await ShippingFee.findOne({
+  where: { region: city.trim() },
+});
+
+if (!existingFee) {
+  await ShippingFee.create({
+    region: city.trim(),
+    method: 'xe máy', // hoặc mặc định gì đó
+    fee: 10000, // mặc định 10.000đ
+    is_active: true,
+  });
+}
      return res.status(201).json({
        success: true,
        message: 'Đã thêm địa chỉ mới',
@@ -128,3 +140,30 @@ import { Address } from '../../models/index.js';
      });
    }
  };
+
+ // Dùng cho admin: Lấy tất cả địa chỉ từ mọi user
+export const getAllAddressCities = async (req, res) => {
+  try {
+    const addresses = await Address.findAll({
+      attributes: ['city'],
+      group: ['city'],
+      raw: true,
+    });
+
+    // Lọc trùng
+    const uniqueCities = [...new Set(addresses.map((a) => a.city).filter(Boolean))];
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách khu vực thành công',
+      data: uniqueCities,
+    });
+  } catch (error) {
+    console.error('getAllAddressCities error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy danh sách khu vực',
+      error: error.message,
+    });
+  }
+};

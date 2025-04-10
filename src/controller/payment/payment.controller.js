@@ -128,6 +128,13 @@ const repayment = async (req, res) => {
     }
 
     const totalAmount = parseFloat(order.total_amount);
+    console.log('[VNPay] Chi tiết đơn hàng:', {
+      orderId: orderId,
+      subtotal: parseFloat(order.subtotal),
+      shippingFee: parseFloat(order.shipping_fee),
+      discount: parseFloat(order.discount_amount),
+      totalAmount: totalAmount
+    });
     if (isNaN(totalAmount) || totalAmount <= 0) {
       return res.status(400).json({
         success: false,

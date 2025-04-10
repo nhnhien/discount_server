@@ -32,6 +32,7 @@ import OrderItem from './order_item.js';
 import Delivery from './delivery.js';
 import Payment from './payment.js';
 import ProductComparison from './product_comparison.js';
+import ShippingFee from './shipping_fee.js'; 
 
 setUpAssociations();
 
@@ -69,4 +70,5 @@ export {
   Delivery,
   Payment,
   ProductComparison,
+  ShippingFee
 };

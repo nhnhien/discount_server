@@ -145,7 +145,6 @@ export const calculatePrice = async (userId, productId, variantId = null, quanti
     }
   }
 
-  // Discount Code
 // Discount Code
 if (options.appliedDiscountCode && discountAmount === 0) {
   const discountCode = options.appliedDiscountCode.trim();
@@ -171,12 +170,16 @@ if (options.appliedDiscountCode && discountAmount === 0) {
       !discount.products.some(p => p.id === productId)
     ) isApplicable = false;
 
+    // if (
+    //   discount.variants?.length > 0 &&
+    //   variantId !== null &&
+    //   !discount.variants.some(v => v.id === variantId)
+    // ) isApplicable = false;
     if (
       discount.variants?.length > 0 &&
-      variantId !== null &&
-      !discount.variants.some(v => v.id === variantId)
+      (!variantId || !discount.variants.some(v => v.id === variantId))
     ) isApplicable = false;
-
+    
     if (
       discount.customers?.length > 0 &&
       !discount.customers.some(u => u.id === effectiveUserId)
