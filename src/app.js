@@ -16,10 +16,26 @@ import addressRouter from './router/address.js';
 import paymentRouter from './router/payment.js';
 import priceComparisonRouter from './router/priceComparison.js'; // Add the new router
 import shippingFeeRouter from './router/shippingFee.js';
+import helmet from 'helmet';
 
 const app = express();
 
+
 app.use(express.json());
+
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+    },
+  })
+);
+
 
 app.use(
   cors({
