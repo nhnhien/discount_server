@@ -71,7 +71,14 @@ const productIncludeOptions = [
 ];
 
 const getProduct = async (req, res) => {
-  const { page = 1, limit = 10, search, categoryId, discount } = req.query;
+  const { 
+    page = 1, 
+    limit = 10, 
+    search, 
+    categoryId, 
+    discount,
+    sortBy = 'newest' 
+  } = req.query;
   const userId = req.query.userId ? Number(req.query.userId) : req.user?.id || null;
   console.log('>>> req.user:', req.user);
 
@@ -91,6 +98,21 @@ const getProduct = async (req, res) => {
       whereCondition.category_id = categoryId;
     }
 
+    // ✅ Cấu hình sắp xếp dựa trên tham số sortBy
+    let order = [];
+    switch (sortBy) {
+      case 'price_asc':
+        order = [['final_price', 'ASC']];
+        break;
+      case 'price_desc':
+        order = [['final_price', 'DESC']];
+        break;
+      case 'newest':
+      default:
+        order = [['createdAt', 'DESC']]; // Sắp xếp theo thời gian tạo mới nhất
+        break;
+    }
+
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const { count, rows: products } = await Product.findAndCountAll({
       where: whereCondition,
@@ -103,6 +125,7 @@ const getProduct = async (req, res) => {
         },
         ...productIncludeOptions
       ],
+      order, // ✅ Áp dụng sắp xếp vào truy vấn
       limit: parseInt(limit),
       offset: offset,
     });
@@ -144,6 +167,15 @@ const getProduct = async (req, res) => {
       updatedProducts = updatedProducts.filter(p => p.appliedRule);
     } else if (discount === 'false') {
       updatedProducts = updatedProducts.filter(p => !p.appliedRule);
+    }
+
+    // ✅ Nếu sort theo giá, cần sắp xếp lại sau khi đã tính toán giá
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      updatedProducts.sort((a, b) => {
+        const priceA = parseFloat(a.final_price) || 0;
+        const priceB = parseFloat(b.final_price) || 0;
+        return sortBy === 'price_asc' ? priceA - priceB : priceB - priceA;
+      });
     }
 
     return res.status(200).json({

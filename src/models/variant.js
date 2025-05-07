@@ -79,7 +79,7 @@ Variant.beforeUpdate(async (variant, options) => {
           old_price: oldOriginalPrice,
           new_price: newOriginalPrice,
           changed_by: options.user?.id || null,
-          change_reason: options.change_reason || 'Cập nhật giá gốc biến thể',
+          change_reason: options.change_reason || 'Update variant original price',
           price_type: 'original',
         });
       }
@@ -91,7 +91,7 @@ Variant.beforeUpdate(async (variant, options) => {
           old_price: oldFinalPrice,
           new_price: newFinalPrice,
           changed_by: options.user?.id || null,
-          change_reason: options.change_reason || 'Cập nhật giá bán biến thể',
+          change_reason: options.change_reason || 'Update variant selling price',
           price_type: 'final',
         });
       }
@@ -122,7 +122,7 @@ Variant.afterCreate(async (variant, options) => {
         old_price: 0,
         new_price: variant.original_price,
         changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Tạo biến thể mới',
+        change_reason: options.change_reason || 'Create new variant',
         price_type: 'original',
       });
     }
@@ -134,7 +134,7 @@ Variant.afterCreate(async (variant, options) => {
         old_price: 0,
         new_price: variant.final_price,
         changed_by: options.user?.id || null,
-        change_reason: options.change_reason || 'Tạo biến thể mới',
+        change_reason: options.change_reason || 'Create new variant',
         price_type: 'final',
       });
     }
@@ -177,7 +177,7 @@ async function createWithRetry(createFn, maxRetries = 3) {
       ) {
         retryCount++;
         const delay = 500 * Math.pow(2, retryCount);
-        console.log(`Đang thử lại lần ${retryCount} sau ${delay}ms...`);
+        console.log(`Retrying attempt ${retryCount} after ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
