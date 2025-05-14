@@ -42,6 +42,12 @@ export const generateExcelTemplate = async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
 
+    // Get all categories
+    const categories = await Category.findAll({
+      attributes: ['id', 'name'],
+      order: [['id', 'ASC']]
+    });
+
     // ================= Sheet 1: Products =================
     const worksheet = workbook.addWorksheet("Products");
 
@@ -76,37 +82,22 @@ export const generateExcelTemplate = async (req, res) => {
       fgColor: { argb: "FFE0E0E0" },
     };
 
-    // ✅ Sample product without variant
-    worksheet.addRow({
-      name: "Sample Product",
-      description: "This is a basic product",
-      category_id: 1,
-      market_id: 1,
-      has_variant: "FALSE",
-      sku: "BASIC-001",
-      original_price: 100000,
-      final_price: 95000,
-      stock_quantity: 100,
-      image_url: "https://example.com/basic.jpg",
-    });
-
-    // ✅ Sample product with variant
-    worksheet.addRow({
-      name: "Sample Variant Product",
-      description: "This product has variants",
-      category_id: 2,
-      market_id: 1,
-      has_variant: "TRUE",
-      variant_sku: "VAR-001-M-RED",
-      variant_original_price: 120000,
-      variant_final_price: 110000,
-      variant_stock_quantity: 50,
-      variant_image_url: "https://example.com/variant.jpg",
-      size: "M",
-      color: "Red",
-      material: "Cotton",
-      other_attributes: "Length: Long, Fit: Slim",
-    });
+    // Add sample data with valid category ID
+    if (categories.length > 0) {
+      const firstCategory = categories[0];
+      worksheet.addRow({
+        name: "Sample Product",
+        description: "This is a basic product",
+        category_id: firstCategory.id,
+        market_id: 1,
+        has_variant: "FALSE",
+        sku: "BASIC-001",
+        original_price: 100000,
+        final_price: 95000,
+        stock_quantity: 100,
+        image_url: "https://example.com/basic.jpg",
+      });
+    }
 
     // ================= Sheet 2: Instructions =================
     const instructions = workbook.addWorksheet("Instructions");
@@ -124,19 +115,19 @@ export const generateExcelTemplate = async (req, res) => {
     };
 
     const guide = [
-      { field: "Name", description: "Tên sản phẩm (bắt buộc)" },
-      { field: "Category ID", description: "ID danh mục (bắt buộc). Xem sheet 'Categories'" },
-      { field: "Market ID", description: "ID sàn thương mại (bắt buộc)" },
-      { field: "Has Variant", description: "TRUE nếu có biến thể, FALSE nếu không" },
-      { field: "SKU", description: "SKU sản phẩm chính nếu không có biến thể" },
-      { field: "Original Price", description: "Giá gốc sản phẩm chính" },
-      { field: "Final Price", description: "Giá sau giảm sản phẩm chính" },
-      { field: "Stock Quantity", description: "Tồn kho sản phẩm chính" },
-      { field: "Variant SKU", description: "SKU của biến thể" },
-      { field: "Variant Original Price", description: "Giá gốc biến thể" },
-      { field: "Variant Final Price", description: "Giá cuối biến thể" },
-      { field: "Size / Color / Material", description: "Thông tin thuộc tính chính của biến thể" },
-      { field: "Other Attributes", description: "Thuộc tính khác: dạng 'Tên: Giá trị', cách nhau bởi dấu phẩy" },
+      { field: "Name", description: "Product name (required)" },
+      { field: "Category ID", description: `Category ID (required). Valid IDs: ${categories.map(c => `${c.id} (${c.name})`).join(', ')}` },
+      { field: "Market ID", description: "Market ID (required)" },
+      { field: "Has Variant", description: "TRUE if has variants, FALSE if not" },
+      { field: "SKU", description: "Product SKU if no variants" },
+      { field: "Original Price", description: "Product original price" },
+      { field: "Final Price", description: "Product final price" },
+      { field: "Stock Quantity", description: "Product stock quantity" },
+      { field: "Variant SKU", description: "Variant SKU" },
+      { field: "Variant Original Price", description: "Variant original price" },
+      { field: "Variant Final Price", description: "Variant final price" },
+      { field: "Size / Color / Material", description: "Main variant attributes" },
+      { field: "Other Attributes", description: "Other attributes: format 'Name: Value', separated by commas" },
     ];
 
     guide.forEach((row) => instructions.addRow(row));
@@ -156,20 +147,26 @@ export const generateExcelTemplate = async (req, res) => {
       fgColor: { argb: "FFCCE5FF" },
     };
 
-    const categories = await Category.findAll({ attributes: ["id", "name"] });
     categories.forEach((cat) => {
       categoriesSheet.addRow({ id: cat.id, name: cat.name });
     });
 
-    // ================= Export =================
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", "attachment; filename=product_template.xlsx");
+    // Set response headers
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=product_template_${Date.now()}.xlsx`
+    );
 
+    // Write to response
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
-    console.error("❌ Error generating Excel template:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error generating Excel template:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -190,6 +187,13 @@ export const importProductsFromExcel = async (req, res) => {
       const transaction = await sequelize.transaction();
   
       try {
+        // Get all valid category IDs first
+        const validCategories = await Category.findAll({
+          attributes: ['id'],
+          transaction
+        });
+        const validCategoryIds = validCategories.map(cat => cat.id);
+
         const filePath = req.file.path;
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(filePath);
@@ -233,13 +237,11 @@ export const importProductsFromExcel = async (req, res) => {
             errors.push(`Row ${rowIndex}: Missing required fields`);
             continue;
           }
-          console.log(`🔍 Checking category_id (row ${rowIndex}):`, rowData["Category ID"], typeof rowData["Category ID"]);
 
-          // Kiểm tra ID có tồn tại trong DB không
-          const categoryExists = await Category.findByPk(rowData["Category ID"]);
-          if (!categoryExists) {
-            console.log(`❌ Row ${rowIndex}: Category không tồn tại`);
-            errors.push(`Row ${rowIndex}: Invalid Category ID: ${rowData["Category ID"]}`);
+          // Validate Category ID
+          if (!validCategoryIds.includes(rowData["Category ID"])) {
+            console.log(`❌ Row ${rowIndex}: Category ID không tồn tại`);
+            errors.push(`Row ${rowIndex}: Invalid Category ID: ${rowData["Category ID"]}. Valid Category IDs are: ${validCategoryIds.join(', ')}`);
             continue;
           }
         
