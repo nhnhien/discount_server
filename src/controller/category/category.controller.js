@@ -1,8 +1,23 @@
-import { Category } from '../../models/index.js';
+import { Category, Product } from '../../models/index.js';
 
 const getCategory = async (req, res) => {
   try {
-    const categories = await Category.findAll({});
+    const categories = await Category.findAll({
+      include: [
+        {
+          model: Product,
+          as: 'products',
+          attributes: [],
+        },
+      ],
+      attributes: {
+        include: [
+          [Category.sequelize.fn('COUNT', Category.sequelize.col('products.id')), 'product_count'],
+        ],
+      },
+      group: ['Category.id'],
+      order: [['id', 'ASC']],
+    });
     res.status(200).json({
       success: true,
       data: categories,

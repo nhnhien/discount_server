@@ -202,6 +202,8 @@ export const getProductComparison = async (req, res) => {
     // }
 
     // === XỬ LÝ KẾT QUẢ ===
+    // Bổ sung lọc loại trừ sản phẩm không liên quan
+    externalProducts = filterByCategoryKeyword(externalProducts, productName);
     externalProducts = removeDuplicates(externalProducts, 'url');
     externalProducts = calculateSimilarityScores(externalProducts, productName, keywords);
 
@@ -502,6 +504,36 @@ function isPriceClose(price1, price2, tolerancePercent = 20) {
   const maxRatio = (100 + tolerancePercent) / 100;
   
   return ratio >= minRatio && ratio <= maxRatio;
+}
+
+// Hàm lọc loại trừ sản phẩm không liên quan dựa trên từ khóa
+function filterByCategoryKeyword(products, productName) {
+  const nameLower = productName.toLowerCase();
+  // Xác định loại sản phẩm chính
+  let mainType = '';
+  if (nameLower.includes('quần') || nameLower.includes('pants') || nameLower.includes('trousers')) {
+    mainType = 'pants';
+  } else if (nameLower.includes('áo') || nameLower.includes('shirt') || nameLower.includes('t-shirt')) {
+    mainType = 'shirt';
+  } // Có thể mở rộng thêm các loại khác
+
+  // Từ khóa loại trừ cho từng loại
+  const excludeMap = {
+    pants: ['áo', 'shirt', 't-shirt', 'hoodie', 'jacket', 'sweater', 'blouse'],
+    shirt: ['quần', 'pants', 'trousers', 'jeans', 'shorts'],
+  };
+  const excludeWords = excludeMap[mainType] || [];
+
+  return products.filter(p => {
+    const title = (p.title || '').toLowerCase();
+    // Nếu là pants, loại các sản phẩm có từ khóa áo...
+    for (const ex of excludeWords) {
+      if (title.includes(ex)) return false;
+    }
+    // Nếu là shirt, loại các sản phẩm có từ khóa quần...
+    // ...
+    return true;
+  });
 }
 
 export default {

@@ -15,12 +15,12 @@ import verifyFirebaseToken from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// ✅ Áp dụng middleware xác thực Firebase cho tất cả route trong file này
-router.use(verifyFirebaseToken);
-
 // === CRUD Product ===
-router.get("/:id", getProductById);
+// Cho phép guest truy cập GET /api/product và GET /api/product/:id
 router.get("/", getProduct);
+router.get("/:id", getProductById);
+// Các route còn lại mới cần xác thực
+router.use(verifyFirebaseToken);
 router.post("/", createProduct);
 router.patch("/:id", updateProduct);
 router.delete("/:id", deleteProduct);
