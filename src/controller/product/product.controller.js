@@ -286,7 +286,7 @@ const createProduct = async (req, res) => {
       const existingSkuInVariant = await Variant.findOne({ where: { sku }, transaction });
 
       if (existingSkuInProduct || existingSkuInVariant) {
-        return res.status(400).json({ success: false, message: `SKU "${sku}" đã tồn tại` });
+        return res.status(400).json({ success: false, message: `SKU "${sku}" already exists` });
       }
     }
 
@@ -297,7 +297,7 @@ const createProduct = async (req, res) => {
         const existingSkuInVariant = await Variant.findOne({ where: { sku: variant.sku }, transaction });
 
         if (existingSkuInProduct || existingSkuInVariant) {
-          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" đã tồn tại` });
+          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" already exists` });
         }
       }
     }
@@ -405,7 +405,7 @@ const updateProduct = async (req, res) => {
       const duplicateInVariant = await Variant.findOne({ where: { sku }, transaction });
 
       if (duplicateInProduct || duplicateInVariant) {
-        return res.status(400).json({ success: false, message: `SKU "${sku}" đã tồn tại` });
+        return res.status(400).json({ success: false, message: `SKU "${sku}" already exists` });
       }
     }
 
@@ -422,7 +422,7 @@ const updateProduct = async (req, res) => {
         const variantBelongsToCurrent = existingVariant?.product_id === Number(id);
 
         if (existingVariant && !variantBelongsToCurrent) {
-          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" đã tồn tại` });
+          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" already exists` });
         }
 
         const duplicateInProduct = await Product.findOne({
@@ -431,7 +431,7 @@ const updateProduct = async (req, res) => {
         });
 
         if (duplicateInProduct) {
-          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" đã tồn tại trong sản phẩm khác` });
+          return res.status(400).json({ success: false, message: `SKU "${variant.sku}" already exists in another product` });
         }
       }
     }
@@ -454,7 +454,7 @@ const updateProduct = async (req, res) => {
     }, {
       transaction,
       user: req.user,
-      change_reason: change_reason || (priceChanged ? 'Cập nhật giá' : 'Cập nhật thông tin'),
+      change_reason: change_reason || (priceChanged ? 'Price update' : 'Information update'),
     });
 
     // Update biến thể

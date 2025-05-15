@@ -7,7 +7,7 @@ const getProductPriceHistory = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Sản phẩm không tồn tại',
+        message: 'Product not found',
       });
     }
 
@@ -42,7 +42,7 @@ const getProductPriceHistory = async (req, res) => {
     console.error('Error in getProductPriceHistory:', error);
     return res.status(500).json({
       success: false,
-      message: 'Không thể lấy lịch sử giá sản phẩm',
+      message: 'Could not retrieve product price history',
       error: error.message,
     });
   }
@@ -58,7 +58,7 @@ const getVariantPriceHistory = async (req, res) => {
     if (!variant) {
       return res.status(404).json({
         success: false,
-        message: 'Biến thể sản phẩm không tồn tại',
+        message: 'Product variant not found',
       });
     }
 
@@ -91,7 +91,7 @@ const getVariantPriceHistory = async (req, res) => {
     console.error('Error in getVariantPriceHistory:', error);
     return res.status(500).json({
       success: false,
-      message: 'Không thể lấy lịch sử giá biến thể sản phẩm',
+      message: 'Could not retrieve product variant price history',
       error: error.message,
     });
   }
@@ -149,7 +149,7 @@ const getAllPriceHistory = async (req, res) => {
     console.error('Error in getAllPriceHistory:', error);
     return res.status(500).json({
       success: false,
-      message: 'Không thể lấy lịch sử giá',
+      message: 'Could not retrieve price history',
       error: error.message,
     });
   }
