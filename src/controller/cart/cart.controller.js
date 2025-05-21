@@ -868,7 +868,7 @@ export const applyDiscount = async (req, res) => {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: `Giá trị đơn hàng tối thiểu phải là ${minOrderAmount.toLocaleString('vi-VN')}đ (hiện tại: ${subtotal.toLocaleString('vi-VN')}đ)`,
+        message: `The minimum order value must be ${minOrderAmount.toLocaleString('vi-VN')}đ (currently: ${subtotal.toLocaleString('vi-VN')}đ)`,
       });
     }
 
@@ -990,7 +990,7 @@ export const applyDiscount = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Đã áp dụng mã giảm giá',
+      message: 'The discount code has been successfully applied.',
       data: {
         id: updatedCart.id,
         items: formattedItems,
